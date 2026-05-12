@@ -20,6 +20,7 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import { getConfigManager } from '../utils/configManager.js';
 import { PackageResolver } from '../utils/packageResolver.js';
+import { detectEol } from '../utils/eolUtils.js';
 import { ProjectFileManager, ProjectFileFinder } from './createD365File.js';
 
 // UTF-8 BOM (Byte Order Mark)
@@ -148,8 +149,13 @@ function parseLabelMap(content: string): Map<string, { text: string; comment?: s
 
 /** Render a label map back to .label.txt content with UTF-8 BOM.
  *  When `sort` is true (default), entries are sorted alphabetically by label ID.
- *  When `sort` is false, entries are written in insertion order (existing + appended). */
-function serializeLabelMap(map: Map<string, { text: string; comment?: string }>, sort = true): string {
+ *  When `sort` is false, entries are written in insertion order (existing + appended).
+ *  `eol` should be the line ending detected from the existing file (defaults to CRLF for new files). */
+function serializeLabelMap(
+  map: Map<string, { text: string; comment?: string }>,
+  sort = true,
+  eol: '\r\n' | '\n' = '\r\n',
+): string {
   const entries = sort
     ? [...map.entries()].sort(([a], [b]) => a.localeCompare(b, 'en', { sensitivity: 'base' }))
     : [...map.entries()];
@@ -159,7 +165,7 @@ function serializeLabelMap(map: Map<string, { text: string; comment?: string }>,
     if (comment) lines.push(` ;${comment}`);
   }
   // End with a newline, prepend UTF-8 BOM for D365FO compatibility
-  return UTF8_BOM + lines.join('\n') + '\n';
+  return UTF8_BOM + lines.join(eol) + eol;
 }
 
 /** Write file with UTF-8 BOM signature */
@@ -390,6 +396,8 @@ export async function createLabelTool(request: CallToolRequest, context: XppServ
         // File doesn't exist yet — start empty
       }
 
+      // Preserve the existing file's line endings so VCS diffs only show the new label.
+      const eol = detectEol(content);
       const labelMap = parseLabelMap(content);
 
       // Duplicate check
@@ -405,8 +413,8 @@ export async function createLabelTool(request: CallToolRequest, context: XppServ
       // Ensure the directory exists
       await fs.mkdir(langDir, { recursive: true });
 
-      // Write updated file with UTF-8 BOM
-      const newContent = serializeLabelMap(labelMap, shouldSort);
+      // Write updated file with UTF-8 BOM, preserving the original EOL style
+      const newContent = serializeLabelMap(labelMap, shouldSort, eol);
       await writeFileWithBom(txtPath, newContent);
       written.push(lang);
 
