@@ -701,12 +701,22 @@ ${fieldsXml}\t<FullTextIndexes />
   ): string {
     const label = properties?.label || enumName;
     const useEnumValue = properties?.useEnumValue ? 'Yes' : 'No';
-
+    const configKeyXml = properties?.configurationKey
+      ? `\t<ConfigurationKey>${properties.configurationKey}</ConfigurationKey>\n`
+      : '';
 
     // Build <EnumValues> block from properties.enumValues array
     // Each entry: { name: string; value?: number; label?: string; helpText?: string }
     const enumValueSpecs: Array<{ name: string; value?: number; label?: string; helpText?: string }> =
       Array.isArray(properties?.enumValues) ? properties.enumValues : [];
+
+    // D365FO hard limit: max 251 elements (0–250). Warn early — compiler rejects beyond this.
+    if (enumValueSpecs.length > 251) {
+      throw new Error(
+        `Enum '${enumName}' has ${enumValueSpecs.length} values but D365FO supports a maximum of 251 (0–250). ` +
+        `Consider redesigning as a class hierarchy or splitting into multiple enums.`
+      );
+    }
 
     let enumValuesXml: string;
     if (enumValueSpecs.length === 0) {
@@ -731,10 +741,11 @@ ${fieldsXml}\t<FullTextIndexes />
     // IsExtensible goes after EnumValues; value is lowercase true/false
     const isExtensibleXml = properties?.isExtensible ? '\t<IsExtensible>true</IsExtensible>\n' : '';
 
+    // Element order matches real D365FO: Name → ConfigurationKey → Label → UseEnumValue → EnumValues → IsExtensible
     return `<?xml version="1.0" encoding="utf-8"?>
 <AxEnum xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
 \t<Name>${enumName}</Name>
-\t<Label>${label}</Label>
+${configKeyXml}\t<Label>${label}</Label>
 \t<UseEnumValue>${useEnumValue}</UseEnumValue>
 ${enumValuesXml}${isExtensibleXml}</AxEnum>
 `;
@@ -1428,7 +1439,7 @@ ${defaultParamGroupXml}
       case 'edt-extension':
         return this.generateAxSimpleExtensionXml('AxEdtExtension', objectName);
       case 'enum-extension':
-        return this.generateAxSimpleExtensionXml('AxEnumExtension', objectName);
+        return this.generateAxEnumExtensionXml(objectName, properties);
       case 'data-entity-extension':
         return this.generateAxSimpleExtensionXml('AxDataEntityViewExtension', objectName);
       case 'menu-item-display':
@@ -1495,6 +1506,47 @@ ${defaultParamGroupXml}
    *  5. <AxReportDesign> has xmlns="" and i:type="AxReportPrecisionDesign" attributes
    *     (VS Designer won't show Designs sub-nodes without these)
    */
+
+  /**
+   * Sanitize AxEnum XML — fixes common AI-generator mistakes that cause VS2022 to
+   * silently ignore enum values or refuse to open the file:
+   *
+   *  1. <Values>…</Values>  →  <EnumValues>…</EnumValues>
+   *     AI models frequently map the JSON `enumValues` array to a plain <Values> wrapper;
+   *     D365FO deserializer requires <EnumValues>.
+   *
+   *  2. <AxEnum> without xmlns:i="http://www.w3.org/2001/XMLSchema-instance"
+   *     The attribute is required for the i:type resolution inside the file.
+   *
+   *  3. More than 251 <AxEnumValue> elements — D365FO compiler hard limit.
+   */
+  static sanitizeEnumXml(xml: string): string {
+    // 1. Rename <Values> container to <EnumValues>
+    if (/<Values>/.test(xml) && !/<EnumValues>/.test(xml)) {
+      xml = xml.replace(/<Values>/g, '<EnumValues>').replace(/<\/Values>/g, '</EnumValues>');
+      console.error('[sanitizeEnumXml] Renamed <Values> → <EnumValues>');
+    }
+
+    // 2. Add xmlns:i to <AxEnum> root if missing
+    if (!xml.includes('xmlns:i=')) {
+      xml = xml.replace(
+        /(<AxEnum)(\s|>)/,
+        '$1 xmlns:i="http://www.w3.org/2001/XMLSchema-instance"$2'
+      );
+      console.error('[sanitizeEnumXml] Added xmlns:i to <AxEnum>');
+    }
+
+    // 3. Validate max 251 enum values (D365FO compiler hard limit, MS Learn confirmed)
+    const valueCount = (xml.match(/<AxEnumValue>/g) ?? []).length;
+    if (valueCount > 251) {
+      console.error(
+        `[sanitizeEnumXml] ⚠️ WARNING: ${valueCount} enum values detected — D365FO supports max 251 (0–250). ` +
+        `The compiler will reject this file. Consider splitting into multiple enums or using a class hierarchy.`
+      );
+    }
+
+    return xml;
+  }
 
   /**
    * Sanitize AxTable XML to ensure correct D365FO field element format.
@@ -2279,7 +2331,7 @@ ${defaultParamGroupXml}
   }
 
   /**
-   * Generate a minimal extension XML for AxEdtExtension, AxEnumExtension,
+   * Generate a minimal extension XML for AxEdtExtension,
    * AxDataEntityViewExtension, AxMenuItemDisplayExtension, AxMenuItemActionExtension,
    * AxMenuItemOutputExtension.
    * Name convention: BaseObjectName.ExtensionName  (e.g. CustTable.MyExtension)
@@ -2290,6 +2342,45 @@ ${defaultParamGroupXml}
 \t<Name>${name}</Name>
 \t<PropertyModifications />
 </${rootElement}>`;
+  }
+
+  /**
+   * Generate AxEnumExtension XML.
+   * Name convention: BaseEnumName.PrefixExtension
+   *
+   * Supported properties:
+   *   enumValues: Array<{ name, label?, value?, countryRegionCodes?, helpText? }>
+   */
+  static generateAxEnumExtensionXml(name: string, properties?: Record<string, any>): string {
+    // Build <EnumValues> block
+    const enumValueSpecs: Array<{
+      name: string; label?: string; value?: number; countryRegionCodes?: string; helpText?: string;
+    }> = Array.isArray(properties?.enumValues) ? properties.enumValues : [];
+
+    let enumValuesXml: string;
+    if (enumValueSpecs.length === 0) {
+      enumValuesXml = '\t<EnumValues />';
+    } else {
+      enumValuesXml = '\t<EnumValues>';
+      for (const v of enumValueSpecs) {
+        enumValuesXml += `\n\t\t<AxEnumValue>`;
+        enumValuesXml += `\n\t\t\t<Name>${v.name}</Name>`;
+        if (v.countryRegionCodes) enumValuesXml += `\n\t\t\t<CountryRegionCodes>${v.countryRegionCodes}</CountryRegionCodes>`;
+        if (v.label) enumValuesXml += `\n\t\t\t<Label>${v.label}</Label>`;
+        if (v.helpText) enumValuesXml += `\n\t\t\t<HelpText>${v.helpText}</HelpText>`;
+        if (v.value !== undefined && v.value !== 0) enumValuesXml += `\n\t\t\t<Value>${v.value}</Value>`;
+        enumValuesXml += `\n\t\t</AxEnumValue>`;
+      }
+      enumValuesXml += '\n\t</EnumValues>';
+    }
+
+    return `<?xml version="1.0" encoding="utf-8"?>
+<AxEnumExtension xmlns:i="http://www.w3.org/2001/XMLSchema-instance">
+\t<Name>${name}</Name>
+${enumValuesXml}
+\t<PropertyModifications />
+\t<ValueModifications />
+</AxEnumExtension>`;
   }
 
   /**
@@ -3712,10 +3803,12 @@ export async function handleCreateD365File(
           if (props.methods) bridgeParams.methods = props.methods as { name: string; source?: string }[];
         }
 
-        // For enums: pass values from properties
+        // For enums: pass values from properties.
+        // Accept both `enumValues` (documented in tool description) and `values` (legacy).
         if (args.objectType === 'enum' && args.properties) {
           const props = args.properties as Record<string, unknown>;
-          if (props.values) bridgeParams.values = props.values as Record<string, unknown>[];
+          const enumVals = (props.enumValues ?? props.values) as Record<string, unknown>[] | undefined;
+          if (enumVals) bridgeParams.values = enumVals;
         }
 
         // For views: pass fields from properties
@@ -3856,6 +3949,12 @@ export async function handleCreateD365File(
     // Sanitize query XML — ensures xmlns="" and i:type="AxQuerySimple" on root element.
     if (args.objectType === 'query') {
       xmlContent = XmlTemplateGenerator.sanitizeQueryXml(xmlContent);
+    }
+
+    // Sanitize enum XML — fixes <Values> → <EnumValues> and adds xmlns:i if missing.
+    // Applies to both template-generated and caller-provided xmlContent.
+    if (args.objectType === 'enum') {
+      xmlContent = XmlTemplateGenerator.sanitizeEnumXml(xmlContent);
     }
 
     // Safety net: ensure every pair of adjacent </Method>…<Method> is separated by

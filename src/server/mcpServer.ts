@@ -840,13 +840,15 @@ EXAMPLES:
                   'Additional properties for the object being created. Supported keys by objectType:\n' +
                   '• class:           extends, implements, isFinal, isAbstract\n' +
                   '• table:           label, tableGroup, tableType, titleField1, titleField2, fields[]\n' +
-                  '• enum:            label, isExtensible, enumValues[{name,value?,label?,helpText?}]\n' +
+                  '• enum:            label, useEnumValue, configurationKey, isExtensible, enumValues[{name,value?,label?,helpText?}]\n' +
+                  '• enum-extension:  enumValues[{name,label?,value?,countryRegionCodes?}]\n' +
                   '• table-extension: fields[{name,edt?,enumType?,label?,mandatory?,fieldType?}] — fieldType defaults to AxTableFieldString; use AxTableFieldEnum for enum-based fields (also set enumType)\n' +
                   '• edt:             label, extends, edtType, stringSize\n' +
                   '• form:            caption, formTemplate, dataSource\n' +
                   '• security-privilege: label, targetObject (menu item ObjectName), objectType (MenuItemDisplay|MenuItemAction|MenuItemOutput, default: MenuItemDisplay), accessLevel (view=Read only | maintain=Read+Update+Create+Delete, default: view)\n' +
                   '• menu-item-*:     label, object, objectType\n' +
                   'Example enum: properties={"label":"@ContosoExt:Status","enumValues":[{"name":"Open","label":"@ContosoExt:Open"},{"name":"Closed","label":"@ContosoExt:Closed"}]}\n' +
+                  'Example enum-extension: properties={"enumValues":[{"name":"MyValue","label":"@MyModel:MyValue","countryRegionCodes":"CZ"}]}\n' +
                   'Example table-extension (string EDT field): properties={"fields":[{"name":"ContosoField","edt":"CustAccount","label":"@Contoso:Customer"}]}\n' +
                   'Example table-extension (enum field): properties={"fields":[{"name":"ContosoStatus","enumType":"NoYes","fieldType":"AxTableFieldEnum","label":"@Contoso:Status"}]}'
               },
@@ -915,7 +917,7 @@ EXAMPLES:
                 description: `Additional properties depending on objectType:
 - class/form/query/view: extends, implements, label
 - table: label, tableGroup, fields[]
-- enum: label, isExtensible, enumValues[{name,value?,label?,helpText?}]
+- enum: label, useEnumValue, configurationKey, isExtensible, enumValues[{name,value?,label?,helpText?}]
 - table-extension: fields[{name,edt?,enumType?,label?,mandatory?,fieldType?}] — fieldType defaults to AxTableFieldString; use AxTableFieldEnum for enum-based fields (also set enumType)
 - report (ALL REQUIRED for correct XML):
     dpClassName   {string}  Data Provider class name (e.g. "ContosoInventByZoneDP")
