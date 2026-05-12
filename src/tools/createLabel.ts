@@ -20,6 +20,7 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import { getConfigManager } from '../utils/configManager.js';
 import { PackageResolver } from '../utils/packageResolver.js';
+import { detectEol } from '../utils/eolUtils.js';
 import { ProjectFileManager, ProjectFileFinder } from './createD365File.js';
 
 // UTF-8 BOM (Byte Order Mark)
@@ -114,15 +115,6 @@ const CreateLabelArgsSchema = z.object({
 });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-/** Detect the dominant line ending in a file. Defaults to CRLF for new/empty
- *  files — D365FO label files are Windows-native and TFVC tracks them as CRLF.
- *  Preserving the original EOL avoids VCS diffs that look like every line changed. */
-function detectEol(content: string): '\r\n' | '\n' {
-  if (content.includes('\r\n')) return '\r\n';
-  if (content.includes('\n')) return '\n';
-  return '\r\n';
-}
 
 /** Parse a .label.txt file into an ordered map: labelId → { text, comment } */
 function parseLabelMap(content: string): Map<string, { text: string; comment?: string }> {

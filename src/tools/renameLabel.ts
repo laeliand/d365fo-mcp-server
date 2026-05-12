@@ -19,6 +19,7 @@ import { promises as fs } from 'fs';
 import * as path from 'path';
 import { getConfigManager } from '../utils/configManager.js';
 import { PackageResolver } from '../utils/packageResolver.js';
+import { detectEol } from '../utils/eolUtils.js';
 
 // UTF-8 BOM
 const UTF8_BOM = '\uFEFF';
@@ -88,9 +89,7 @@ function escapeRegex(s: string): string {
 function renameLabelInTxt(content: string, oldId: string, newId: string): string | null {
   // Preserve the original line-ending style — D365FO .label.txt files are CRLF
   // in TFVC/Git, and silently rewriting them as LF makes every line look modified.
-  const eol: '\r\n' | '\n' = content.includes('\r\n')
-    ? '\r\n'
-    : (content.includes('\n') ? '\n' : '\r\n');
+  const eol = detectEol(content);
   const lines = stripBom(content).replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
   let found = false;
   const out: string[] = [];

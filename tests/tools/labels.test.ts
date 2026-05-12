@@ -879,4 +879,41 @@ describe('rename_label', () => {
     const bareLfMatches = labelWrite!.content.match(/(?<!\r)\n/g);
     expect(bareLfMatches).toBeNull();
   });
+
+  it('preserves LF line endings when renaming inside a LF .label.txt', async () => {
+    const fsMock = await import('fs');
+    const writeCalls: Array<{ path: string; content: string }> = [];
+    (fsMock.promises.writeFile as any).mockImplementation(async (p: string, content: string) => {
+      writeCalls.push({ path: p, content });
+    });
+    (fsMock.promises.readdir as any).mockResolvedValueOnce(['en-US']);
+    // LF source file — e.g. a repo checked out on Linux or with core.autocrlf=false.
+    (fsMock.promises.readFile as any).mockResolvedValue(
+      '\uFEFFAppleLabel=Apple text\nOldFeatureName=Some text\nZebraLabel=Zebra text\n',
+    );
+
+    (ctx.symbolIndex.searchLabels as any).mockReturnValue([
+      makeLabelResult({ labelId: 'OldFeatureName' }),
+    ]);
+
+    const result = await renameLabelTool(
+      req('rename_label', {
+        oldLabelId: 'OldFeatureName',
+        newLabelId: 'NewFeatureName',
+        labelFileId: 'MyModel',
+        model: 'MyModel',
+        updateIndex: false,
+      }),
+      ctx,
+    );
+    if (result.isError) throw new Error(`rename_label failed: ${result.content[0].text}`);
+    expect(result.isError).toBeFalsy();
+    const labelWrite = writeCalls.find(c => c.path.endsWith('.label.txt'));
+    expect(labelWrite).toBeDefined();
+    // Renamed line must keep LF — tool must not upgrade a LF file to CRLF.
+    expect(labelWrite!.content).toContain('NewFeatureName=Some text\n');
+    expect(labelWrite!.content).toContain('AppleLabel=Apple text\n');
+    // No CRLF sequences must be present — file must stay pure LF.
+    expect(labelWrite!.content).not.toContain('\r\n');
+  });
 });
