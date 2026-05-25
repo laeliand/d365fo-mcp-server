@@ -659,6 +659,44 @@ class ConfigManager {
   }
 
   /**
+   * Returns true when the static configuration (`.mcp.json` + `D365FO_*` env vars)
+   * already provides enough workspace context to work without calling `roots/list`.
+   *
+   * In instanced mode every project has its own dedicated server instance whose
+   * config file contains both a model name and at least one path. Calling
+   * `roots/list` in this situation is unnecessary and causes a -32001 timeout when
+   * `mcp-remote` is the transport (it has a hard-coded 60 s request timeout and
+   * cannot complete a server-initiated request over HTTP).
+   *
+   * Awaits `ensureLoaded()` so it is safe to call before the first tool invocation.
+   */
+  async isStaticallyConfigured(): Promise<boolean> {
+    await this.ensureLoaded();
+
+    const fileContext = this.config?.context || this.config?.servers?.context;
+
+    const hasModelName = !!(
+      fileContext?.modelName ||
+      process.env.D365FO_MODEL_NAME
+    );
+
+    const hasPath = !!(
+      fileContext?.workspacePath       ||
+      fileContext?.packagePath         ||
+      fileContext?.customPackagesPath  ||
+      fileContext?.projectPath         ||
+      fileContext?.solutionPath        ||
+      process.env.D365FO_WORKSPACE_PATH          ||
+      process.env.D365FO_PACKAGE_PATH            ||
+      process.env.D365FO_CUSTOM_PACKAGES_PATH    ||
+      process.env.D365FO_PROJECT_PATH            ||
+      process.env.D365FO_SOLUTION_PATH
+    );
+
+    return hasModelName && hasPath;
+  }
+
+  /**
    * Get workspace path from configuration
    * Returns the base PackagesLocalDirectory path if workspacePath contains it
    */
