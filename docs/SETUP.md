@@ -221,7 +221,7 @@ copy .env.example .env
 Edit `.env`:
 
 ```env
-DEV_ENVIRONMENT_TYPE=auto
+D365FO_DEV_ENVIRONMENT_TYPE=auto
 PACKAGES_PATH=K:/AosService/PackagesLocalDirectory
 CUSTOM_MODELS=YourPackageName
 ```
