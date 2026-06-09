@@ -767,12 +767,17 @@ Show me the X++ snippet for label BatchGroup
 
 ### create_label
 
-Adds a new label to every language `.label.txt` file in a model. Inserts the entry
-alphabetically (as required by the D365FO label file format), creates the AxLabelFile XML
-descriptors if the model doesn't have any yet, and updates the MCP index so the new label
-is immediately searchable.
+Adds a new label to every language `.label.txt` file in a model (or only the locales given in
+`languages`). Inserts the entry alphabetically (as required by the D365FO label file format),
+creates the AxLabelFile XML descriptors if the model doesn't have any yet, and updates the MCP
+index so the new label is immediately searchable.
 
 > **Always call `search_labels` first** to verify the label doesn't already exist.
+
+> **Note — `LabelResources/` is shared across the whole model.** By default the label is written
+> to *every* locale folder present in the model, even folders that exist only because a sibling
+> label file (e.g. a multi-language report) ships them. For a customization that needs just one
+> language, pass `languages: ["en-US"]` to avoid creating empty placeholder files for the others.
 
 **Parameters:**
 - `labelId` — new label ID, e.g. `MyNewField` (required)
@@ -780,6 +785,8 @@ is immediately searchable.
 - `model` — model name, e.g. `MyModel` (required)
 - `translations` — array of `{ language, text }` objects (required); provide all supported
   languages
+- `languages` — restrict which locale `.label.txt` files are written/created, e.g. `["en-US"]`.
+  When omitted/empty, writes to every language folder already present in the model (default)
 - `defaultComment` — developer comment added to each translation
 - `packageName` — package name for label file location; auto-resolved from model if omitted
 - `packagePath` — override base path (default: auto-detected from environment)
