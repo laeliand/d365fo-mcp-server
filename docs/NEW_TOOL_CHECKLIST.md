@@ -8,6 +8,8 @@ Every new MCP tool requires changes in these files. Check each item before openi
 - [ ] Export `*ToolDefinition` (input schema) or define it inline in `mcpServer.ts`
 - [ ] Add `import` + `case '<tool_name>':` in `src/tools/toolHandler.ts`
 - [ ] Add tool `ListToolsResultSchema` entry in `src/server/mcpServer.ts`
+- [ ] Add `TOOL_ANNOTATIONS` entry in `src/server/toolAnnotations.ts` (display title + readOnly/destructive hints — enforced by toolInventory test)
+- [ ] Add a progress message case in `src/utils/toolProgressMessage.ts`
 - [ ] Decide locality: add to `LOCAL_TOOLS` in `src/server/serverMode.ts` only if the tool requires local filesystem/Windows access
 
 ## Startup catalog (index.ts)

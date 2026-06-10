@@ -133,3 +133,27 @@ describe('enforceGrounding', () => {
     expect(enforceGrounding(token, 'op')).toBeNull();
   });
 });
+
+// ─── Hybrid-deployment guard ─────────────────────────────────────────────────
+// In write-only mode prepare_change is not exposed and tokens live in the
+// read-only instance's memory — enforcement would dead-loop the agent between
+// the two servers, so it must be bypassed (with a stderr warning).
+
+describe('enforceGrounding in write-only server mode', () => {
+  afterEach(() => {
+    vi.doUnmock('../../src/server/serverMode');
+    vi.resetModules();
+  });
+
+  it('bypasses enforcement even without a token', async () => {
+    process.env.GROUNDING_ENFORCE = 'true';
+    vi.resetModules();
+    vi.doMock('../../src/server/serverMode', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('../../src/server/serverMode')>()),
+      SERVER_MODE: 'write-only' as const,
+    }));
+    const { enforceGrounding: enforceWriteOnly } = await import('../../src/utils/provenanceStore');
+    expect(enforceWriteOnly(undefined, 'create_d365fo_file(...)')).toBeNull();
+    expect(enforceWriteOnly('deadbeefdeadbeefdeadbeefdeadbeef', 'op')).toBeNull();
+  });
+});

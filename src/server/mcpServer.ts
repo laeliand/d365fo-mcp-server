@@ -16,6 +16,7 @@ import { registerWorkspaceResources } from '../resources/workspaceResource.js';
 import { registerCodeReviewPrompt } from '../prompts/codeReview.js';
 import type { XppServerContext } from '../types/context.js';
 import { SERVER_MODE, LOCAL_TOOLS } from './serverMode.js';
+import { TOOL_ANNOTATIONS } from './toolAnnotations.js';
 import { getConfigManager } from '../utils/configManager.js';
 import { setLastRoots, recordRootsListChanged } from '../utils/stdioSessionInfo.js';
 
@@ -2134,6 +2135,14 @@ SourceCode format for classes: class declaration with member vars inside { }, me
       },
     ],
     };
+
+    // Attach MCP tool annotations (display title + behavior hints).
+    // VS Code shows annotations.title in the chat UI ("Ran Search D365FO index"
+    // instead of "Ran search") and uses readOnlyHint to skip write confirmations.
+    allTools.tools = allTools.tools.map(t => ({
+      ...t,
+      annotations: TOOL_ANNOTATIONS[t.name],
+    })) as typeof allTools.tools;
 
     // Apply server mode filter
     if (SERVER_MODE === 'read-only') {
