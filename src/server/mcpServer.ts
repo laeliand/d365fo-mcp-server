@@ -591,6 +591,13 @@ SourceCode format for classes: class declaration with member vars inside { }, me
                   '\u274c NEVER use PowerShell/create_file to overwrite D365FO objects \u2014 always use overwrite=true here.',
                 default: false,
               },
+              groundingToken: {
+                type: 'string',
+                description:
+                  'Provenance token returned by prepare_change. Proves the change was grounded in the indexed codebase. ' +
+                  'Required for *-extension objectTypes when GROUNDING_ENFORCE=true on the server. ' +
+                  'The token is object-bound: it only authorizes writes to the object it was issued for.',
+              },
             },
             required: ['objectType', 'objectName'],
           },
@@ -921,6 +928,13 @@ SourceCode format for classes: class declaration with member vars inside { }, me
               workspacePath: {
                 type: 'string',
                 description: 'Path to workspace for finding file'
+              },
+              groundingToken: {
+                type: 'string',
+                description:
+                  'Provenance token returned by prepare_change. Proves the change was grounded in the indexed codebase. ' +
+                  'Required for *-extension objectTypes when GROUNDING_ENFORCE=true on the server. ' +
+                  'The token is object-bound: it only authorizes writes to the object it was issued for.',
               },
             },
             required: ['objectType', 'objectName', 'operation'],

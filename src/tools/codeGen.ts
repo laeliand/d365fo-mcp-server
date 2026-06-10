@@ -1860,6 +1860,7 @@ export async function codeGenTool(request: CallToolRequest) {
       const groundingError = enforceGrounding(
         args.groundingToken,
         `generate_code(pattern="${args.pattern}", name="${args.name}")`,
+        args.name,
       );
       if (groundingError) return groundingError;
 

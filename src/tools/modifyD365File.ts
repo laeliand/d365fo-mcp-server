@@ -29,6 +29,7 @@ import {
 import { invalidateCache } from './updateSymbolIndex.js';
 import { ProjectFileManager, ProjectFileFinder } from './createD365File.js';
 import { normalizeD365Xml } from '../utils/d365XmlNormalizer.js';
+import { enforceGrounding } from '../utils/provenanceStore.js';
 
 /**
  * Decode the standard XML entities (&lt;, &gt;, &apos;, &quot;, &amp;) and normalise
@@ -367,11 +368,28 @@ const ModifyD365FileArgsSchema = z.object({
   solutionPath: z.string().optional().describe(
     'Path to VS solution directory. Used to find .rnrproj when projectPath is not given.'
   ),
+  groundingToken: z.string().optional().describe(
+    'Provenance token returned by prepare_change. Proves the change was grounded in the indexed codebase. ' +
+    'Required for *-extension objectTypes when GROUNDING_ENFORCE=true on the server.'
+  ),
 });
 
 export async function modifyD365FileTool(request: CallToolRequest, context: XppServerContext) {
   try {
     const args = ModifyD365FileArgsSchema.parse(request.params.arguments);
+
+    // Grounding enforcement: modifying an extension changes the behaviour of an
+    // existing base object — when GROUNDING_ENFORCE=true the model must prove
+    // (via prepare_change) that it inspected the real object first.
+    if (args.objectType.endsWith('-extension')) {
+      const groundingError = enforceGrounding(
+        args.groundingToken,
+        `modify_d365fo_file(objectType="${args.objectType}", objectName="${args.objectName}", operation="${args.operation}")`,
+        args.objectName,
+      );
+      if (groundingError) return groundingError;
+    }
+
     const { symbolIndex } = context;
     const {
       objectType,

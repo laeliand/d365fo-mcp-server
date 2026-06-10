@@ -14,6 +14,7 @@ import { PackageResolver } from '../utils/packageResolver.js';
 import { ensureXppDocComment, ensureBlankLineBeforeClosingBrace } from '../utils/xppDocGen.js';
 import { decodeXmlEntitiesFromXppSource } from './modifyD365File.js';
 import { bridgeValidateAfterWrite, canBridgeCreate, bridgeCreateObject } from '../bridge/index.js';
+import { enforceGrounding } from '../utils/provenanceStore.js';
 import { invalidateCache } from './updateSymbolIndex.js';
 import { normalizeD365Xml } from '../utils/d365XmlNormalizer.js';
 
@@ -108,6 +109,13 @@ const CreateD365FileArgsSchema = z.object({
     .describe(
       'Allow overwriting an existing file. Use together with xmlContent when you need to completely ' +
       'rewrite an object (e.g. table with corrupted field names). Default: false (returns error if file already exists).'
+    ),
+  groundingToken: z
+    .string()
+    .optional()
+    .describe(
+      'Provenance token returned by prepare_change. Proves the change was grounded in the indexed codebase. ' +
+      'Required for *-extension objectTypes when GROUNDING_ENFORCE=true on the server.'
     ),
 });
 
@@ -3313,6 +3321,18 @@ export async function handleCreateD365File(
   },
 ): Promise<{ content: Array<{ type: string; text: string }>; isError?: boolean }> {
   const args = CreateD365FileArgsSchema.parse(request.params.arguments);
+
+  // Grounding enforcement: extension objects modify the behaviour of existing
+  // code, so when GROUNDING_ENFORCE=true the model must prove (via prepare_change)
+  // that it inspected the real object before writing the extension.
+  if (args.objectType.endsWith('-extension')) {
+    const groundingError = enforceGrounding(
+      args.groundingToken,
+      `create_d365fo_file(objectType="${args.objectType}", objectName="${args.objectName}")`,
+      args.objectName,
+    );
+    if (groundingError) return groundingError;
+  }
 
   try {
     // Step 1: Try to find and parse .rnrproj to get actual ModelName

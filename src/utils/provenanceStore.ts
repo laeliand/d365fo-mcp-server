@@ -19,6 +19,8 @@ export interface ProvenanceContext {
   objectName: string;
   methodName?: string;
   objectType?: string;
+  /** Proposed name of the new extension object, when supplied to prepare_change */
+  proposedName?: string;
   /** Condensed facts gathered by prepare_change */
   methodSignature?: string;
   cocExtensions?: string;
@@ -75,20 +77,64 @@ export function isValidToken(token: string): boolean {
 }
 
 /**
+ * Check that a token was issued for the object actually being written.
+ *
+ * A token issued for `CustTable` is accepted for targets that embed that name
+ * (`CustTable.ContosoExtension`, `CustTableContoso_Extension`, …) and for the
+ * proposedName recorded by prepare_change. Names shorter than 4 chars are
+ * compared exactly to avoid trivial substring matches.
+ */
+export function tokenMatchesTarget(
+  bundle: ProvenanceBundle,
+  targetObjectName: string,
+): boolean {
+  const target = targetObjectName.trim().toLowerCase();
+  if (!target) return true;
+  const candidates = [bundle.context.objectName, bundle.context.proposedName]
+    .filter((c): c is string => !!c)
+    .map(c => c.trim().toLowerCase());
+  return candidates.some(c => {
+    if (c === target) return true;
+    if (c.length < 4 || target.length < 4) return false;
+    return target.includes(c) || c.includes(target);
+  });
+}
+
+/**
  * Enforce grounding for extension write operations.
  *
- * Returns an error result if:
- *   - GROUNDING_ENFORCE=true is set in the environment, AND
- *   - no valid grounding token was provided.
+ * Returns an error result if GROUNDING_ENFORCE=true is set in the environment AND:
+ *   - no valid grounding token was provided, OR
+ *   - the token was issued for a different object than `targetObjectName`.
  *
  * Returns null when enforcement passes (either disabled or token is valid).
  */
 export function enforceGrounding(
   groundingToken: string | undefined,
   operationDescription: string,
+  targetObjectName?: string,
 ): { isError: true; content: [{ type: 'text'; text: string }] } | null {
   if (process.env.GROUNDING_ENFORCE !== 'true') return null;
-  if (groundingToken && isValidToken(groundingToken)) return null;
+  if (groundingToken && isValidToken(groundingToken)) {
+    if (!targetObjectName) return null;
+    const bundle = getProvenanceBundle(groundingToken)!;
+    if (tokenMatchesTarget(bundle, targetObjectName)) return null;
+    return {
+      isError: true,
+      content: [{
+        type: 'text',
+        text:
+          `❌ Grounding token mismatch for ${operationDescription} (GROUNDING_ENFORCE=true).\n\n` +
+          `The provided token was issued for object \`${bundle.context.objectName}\`` +
+          (bundle.context.proposedName ? ` (proposed: \`${bundle.context.proposedName}\`)` : '') +
+          `, but this call targets \`${targetObjectName}\`.\n\n` +
+          `**Required workflow:**\n` +
+          `1. Call \`prepare_change(goal="...", objectName="${targetObjectName}")\` for THIS object.\n` +
+          `2. Pass the returned \`groundingToken\` to this tool.\n\n` +
+          `Tokens are object-bound — one token cannot authorize writes to a different object.`,
+      }],
+    };
+  }
   const reason = groundingToken
     ? 'the provided groundingToken has expired or is invalid'
     : 'no groundingToken was provided';

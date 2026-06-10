@@ -279,6 +279,7 @@ export async function prepareChangeTool(request: any, context: XppServerContext)
     objectName,
     methodName,
     objectType: resolvedType,
+    proposedName,
     methodSignature: sigText ?? undefined,
     cocExtensions: cocText,
     extensionEligibility: eligText,
@@ -333,10 +334,11 @@ export async function prepareChangeTool(request: any, context: XppServerContext)
   lines.push(
     process.env.GROUNDING_ENFORCE === 'true'
       ? '⚠️  **GROUNDING_ENFORCE=true** — pass `groundingToken` to `generate_code` ' +
-        '(extension patterns) and `create_d365fo_file` (extension objectTypes). ' +
+        '(extension patterns), `create_d365fo_file` and `modify_d365fo_file` (extension objectTypes). ' +
+        `The token is bound to \`${objectName}\` — it does not authorize writes to other objects. ` +
         'Token expires in 30 minutes.'
-      : 'ℹ️  Pass `groundingToken` to `generate_code` or `create_d365fo_file` to confirm ' +
-        'this context was used. Set `GROUNDING_ENFORCE=true` to require it.',
+      : 'ℹ️  Pass `groundingToken` to `generate_code`, `create_d365fo_file` or `modify_d365fo_file` ' +
+        'to confirm this context was used. Set `GROUNDING_ENFORCE=true` to require it.',
   );
 
   return {
