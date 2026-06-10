@@ -11,6 +11,7 @@
  */
 
 import crypto from 'crypto';
+import { SERVER_MODE } from '../server/serverMode.js';
 
 const TTL_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -109,12 +110,32 @@ export function tokenMatchesTarget(
  *
  * Returns null when enforcement passes (either disabled or token is valid).
  */
+let warnedWriteOnlyBypass = false;
+
 export function enforceGrounding(
   groundingToken: string | undefined,
   operationDescription: string,
   targetObjectName?: string,
 ): { isError: true; content: [{ type: 'text'; text: string }] } | null {
   if (process.env.GROUNDING_ENFORCE !== 'true') return null;
+  // Hybrid-deployment guard: in write-only mode prepare_change is not exposed
+  // by this instance (it runs on the read-only/Azure server) and tokens live
+  // in THAT process's memory, so no token can ever validate here. Enforcing
+  // would dead-loop the agent between the two servers: local write rejects →
+  // error says "call prepare_change" → Azure issues a token this process
+  // cannot validate → local write rejects again. Grounding is enforced by the
+  // read-only instance's generate_code path instead.
+  if (SERVER_MODE === 'write-only') {
+    if (!warnedWriteOnlyBypass) {
+      warnedWriteOnlyBypass = true;
+      console.error(
+        '[provenance] ⚠️ GROUNDING_ENFORCE=true is ignored in write-only mode — ' +
+        'prepare_change tokens are issued by the read-only instance and cannot be ' +
+        'validated in this process. Remove GROUNDING_ENFORCE from the local companion .env.',
+      );
+    }
+    return null;
+  }
   if (groundingToken && isValidToken(groundingToken)) {
     if (!targetObjectName) return null;
     const bundle = getProvenanceBundle(groundingToken)!;

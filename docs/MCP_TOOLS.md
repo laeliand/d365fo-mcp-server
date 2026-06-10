@@ -158,6 +158,8 @@ The following tools empower Copilot to trigger X++ compilation, testing, and db 
 > - X++ source passed to `create_d365fo_file` / `modify_d365fo_file` is run through `resolve_references` — the write is rejected while any identifier cannot be proven against the index.
 >
 > This ensures generated code is grounded in your actual codebase, not AI training data.
+>
+> **Hybrid deployment note:** grounding tokens live in the issuing process's memory. In `write-only` mode (local companion) `prepare_change` is not exposed and tokens issued by the read-only/Azure instance cannot be validated locally, so `GROUNDING_ENFORCE=true` is **ignored** there (with a startup warning) — otherwise the agent would loop forever between the two servers. Only enable enforcement on a `full`-mode server.
 
 ---
 
