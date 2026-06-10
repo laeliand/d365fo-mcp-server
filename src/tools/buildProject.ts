@@ -8,6 +8,7 @@ import os from 'os';
 import crypto from 'crypto';
 import { getConfigManager } from '../utils/configManager.js';
 import { forceReleaseLock } from '../utils/operationLocks.js';
+import { lookupErrorFix } from './d365foErrorHelp.js';
 
 const execFileAsync = util.promisify(execFile);
 
@@ -49,6 +50,107 @@ const XPPC_COMPILE_ERROR_RE = /^Compile Error:/m;
 
 // When xppc reports stale symbols from a previous incremental build, a full build is needed
 const XPPC_STALE_SYMBOL_RE = /has not been successfully compiled since it was last changed|Do a Full Build/i;
+
+// ---------------------------------------------------------------------------
+// Structured compiler diagnostics
+// xppc -log lines have the form (observed in standalone/UDE mode):
+//   Compile Error: Class Method dynamics://MyModel/MyClass/myMethod: [(28,27),(28,28)]: ';' expected.
+// i.e.  <severity>: <element kind> dynamics://<model>/<object>[/<member>]: [(line,col)[,(line,col)]]: <message>
+// ---------------------------------------------------------------------------
+
+export interface XppcDiagnostic {
+  severity: 'error' | 'warning';
+  /** Element kind as reported by xppc, e.g. "Class Method", "Table Field" */
+  kind?: string;
+  model?: string;
+  object?: string;
+  member?: string;
+  line?: number;
+  column?: number;
+  message: string;
+}
+
+const XPPC_DIAG_LINE_RE =
+  /^(Compile Fatal Error|Compile Error|Compile Warning|Generation Warning|Best Practice Warning):\s*(?:(.*?)\s+)?dynamics:\/\/([^/\s:]+)\/([^/\s:]+)(?:\/([^\s:]+))?\s*:?\s*\[\((\d+),(\d+)\)(?:,\(\d+,\d+\))?\]\s*:\s*(.*)$/;
+
+/** Parse xppc log content into structured diagnostics. */
+export function parseXppcDiagnostics(logContent: string): XppcDiagnostic[] {
+  const diagnostics: XppcDiagnostic[] = [];
+  for (const rawLine of logContent.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    const m = XPPC_DIAG_LINE_RE.exec(line);
+    if (m) {
+      diagnostics.push({
+        severity: m[1].includes('Error') ? 'error' : 'warning',
+        kind: m[2] || undefined,
+        model: m[3],
+        object: m[4],
+        member: m[5] || undefined,
+        line: Number(m[6]),
+        column: Number(m[7]),
+        message: m[8].trim(),
+      });
+      continue;
+    }
+    // Fallback: severity prefix without the dynamics:// location part
+    const simple = /^(Compile Fatal Error|Compile Error|Compile Warning|Generation Warning):\s*(.+)$/.exec(line);
+    if (simple) {
+      diagnostics.push({
+        severity: simple[1].includes('Error') ? 'error' : 'warning',
+        message: simple[2].trim(),
+      });
+    }
+  }
+  return diagnostics;
+}
+
+/**
+ * Render diagnostics as a numbered, machine-actionable block. Errors come
+ * first; duplicate messages are collapsed; the first few distinct errors are
+ * enriched with a fix hint from the get_d365fo_error_help knowledge base so
+ * the model can correct everything in one round.
+ */
+export function formatStructuredDiagnostics(diagnostics: XppcDiagnostic[], maxItems = 25): string {
+  if (diagnostics.length === 0) return '';
+  const errors = diagnostics.filter(d => d.severity === 'error');
+  const warnings = diagnostics.filter(d => d.severity === 'warning');
+  const ordered = [...errors, ...warnings];
+
+  const seen = new Set<string>();
+  const lines: string[] = [
+    `📋 Structured diagnostics: ${errors.length} error(s), ${warnings.length} warning(s)`,
+    '',
+  ];
+  let shown = 0;
+  let enriched = 0;
+  for (const d of ordered) {
+    const key = `${d.object ?? ''}|${d.member ?? ''}|${d.line ?? ''}|${d.message}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (shown >= maxItems) {
+      lines.push(`… and ${ordered.length - shown} more (see raw log below).`);
+      break;
+    }
+    shown++;
+    const location = d.object
+      ? `${d.object}${d.member ? `.${d.member}` : ''}${d.line ? ` (line ${d.line}, col ${d.column})` : ''}`
+      : '(no location)';
+    lines.push(`${shown}. ${d.severity === 'error' ? '🔴' : '🟡'} ${location}: ${d.message}`);
+    // Enrich the first few distinct errors with a known fix
+    if (d.severity === 'error' && enriched < 3) {
+      const help = lookupErrorFix(d.message);
+      if (help) {
+        enriched++;
+        lines.push(`   💡 ${help.title}: ${help.fix[0]}`);
+      }
+    }
+  }
+  if (errors.length > 0) {
+    lines.push('');
+    lines.push('Fix the errors with modify_d365fo_file (use the object/line references above), then rebuild.');
+  }
+  return lines.join('\n');
+}
 
 // ---------------------------------------------------------------------------
 // Build job state
@@ -132,6 +234,15 @@ async function readLogTail(logFile: string, lines = 60): Promise<string> {
     return all.slice(-lines).join('\n').trim();
   } catch {
     return '(log not yet available)';
+  }
+}
+
+// Read the entire log without truncation — used for diagnostics parsing only.
+async function readWholeLog(logFile: string): Promise<string> {
+  try {
+    return await readFile(logFile, 'utf-8');
+  } catch {
+    return '';
   }
 }
 
@@ -688,14 +799,20 @@ export const buildProjectTool = async (params: any, _context: any) => {
         const relevantResult = succeeded
           ? allResults[allResults.length - 1]
           : allResults.find(r => r.status === 'failed');
+        const relevantLogFile = relevantResult?.logFile ?? existingState.logFile;
         const logContent = succeeded
-          ? await readLogTail(relevantResult?.logFile ?? existingState.logFile)
-          : await readFullLog(relevantResult?.logFile ?? existingState.logFile);
+          ? await readLogTail(relevantLogFile)
+          : await readFullLog(relevantLogFile);
+        const structured = succeeded
+          ? ''
+          : formatStructuredDiagnostics(parseXppcDiagnostics(await readWholeLog(relevantLogFile)));
 
         return {
           content: [{
             type: 'text',
-            text: `${statusIcon} — ${allResults.length} models, ${totalDuration}s total\n\n${modelLines}\n\n--- Log (${relevantResult?.modelName ?? targetModel}) ---\n${logContent}`,
+            text: `${statusIcon} — ${allResults.length} models, ${totalDuration}s total\n\n${modelLines}\n\n` +
+              (structured ? `${structured}\n\n` : '') +
+              `--- Log (${relevantResult?.modelName ?? targetModel}) ---\n${logContent}`,
           }],
           ...(succeeded ? {} : { isError: true }),
         };
@@ -710,11 +827,16 @@ export const buildProjectTool = async (params: any, _context: any) => {
       const duration      = existingState.endTime
         ? Math.round((new Date(existingState.endTime).getTime() - new Date(existingState.startTime).getTime()) / 1000)
         : '?';
+      const structured    = succeeded
+        ? ''
+        : formatStructuredDiagnostics(parseXppcDiagnostics(await readWholeLog(existingState.logFile)));
 
       return {
         content: [{
           type: 'text',
-          text: `${statusIcon} (${existingState.tool}, ${buildMode}, ${duration}s)\n\nModel: ${targetModel}\n\n${logContent || '(no output)'}`,
+          text: `${statusIcon} (${existingState.tool}, ${buildMode}, ${duration}s)\n\nModel: ${targetModel}\n\n` +
+            (structured ? `${structured}\n\n--- Raw log ---\n` : '') +
+            `${logContent || '(no output)'}`,
         }],
         ...((!succeeded) ? { isError: true } : {}),
       };

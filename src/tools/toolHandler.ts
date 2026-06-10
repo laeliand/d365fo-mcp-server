@@ -62,7 +62,13 @@ import { validateXppTool } from './validateXpp.js';
 import { resolveReferencesTool } from './resolveReferences.js';
 import { prepareChangeTool } from './prepareChange.js';
 import { prepareCreateTool } from './prepareCreate.js';
-import { recordToolStart, startMetricsLogging } from '../utils/toolMetrics.js';
+import { recordToolStart, startMetricsLogging, recordCallSequence } from '../utils/toolMetrics.js';
+import {
+  DEDUP_EXCLUDED_TOOLS, DEDUP_TTL_MS,
+  dedupKey, getDedupedResult, storeDedupResult, appendNote,
+} from '../utils/callDedup.js';
+import { checkIndexStaleness } from '../utils/indexStaleness.js';
+import * as nodePath from 'path';
 import { buildProgressMessage } from '../utils/toolProgressMessage.js';
 
 /**
@@ -144,6 +150,7 @@ function getCapForTool(toolName: string): number | 'uncapped' {
   return TOOL_CAP_SIZES[toolName] ?? TOOL_CAP_SIZES['default'];
 }
 
+
 function capToolResponse(toolName: string, result: any): any {
   const cap = getCapForTool(toolName);
   if (cap === 'uncapped' || !result?.content) return result;
@@ -208,6 +215,21 @@ export function registerToolHandler(server: Server, context: XppServerContext): 
         content: [{ type: 'text', text: `⚠️ Tool '${toolName}' is not available in write-only mode.\n\nThis local MCP server only handles file operations. Search and analysis tools are provided by the Azure MCP server.` }],
         isError: true,
       };
+    }
+
+    // ── Loop detection + duplicate-call dedup ────────────────────────────────
+    const callKey = dedupKey(toolName, request.params.arguments);
+    const occurrences = recordCallSequence(toolName, callKey);
+    if (!DEDUP_EXCLUDED_TOOLS.has(toolName)) {
+      const cached = getDedupedResult(callKey);
+      if (cached !== undefined) {
+        console.error(`[toolHandler] ♻️  ${toolName}: identical call within ${DEDUP_TTL_MS / 1000}s — served from dedup cache`);
+        return appendNote(
+          cached,
+          `> ♻️ Duplicate call — this exact ${toolName} call was answered moments ago; ` +
+          `the result above is identical. Use the data you already have instead of re-querying.`,
+        );
+      }
     }
 
     const finishMetrics = recordToolStart(toolName);
@@ -587,6 +609,21 @@ export function registerToolHandler(server: Server, context: XppServerContext): 
         }
 
         // -----------------------------------------------------------------------
+        // Index freshness — compare workspace mtimes vs last_indexed_at so the
+        // model (and user) know whether symbol lookups reflect current code.
+        // -----------------------------------------------------------------------
+        try {
+          const lastIndexedAt = context.symbolIndex.getLastIndexedAt?.() ?? null;
+          const modelMetadataDir = packagePath && modelName
+            ? nodePath.join(packagePath, modelName)
+            : null;
+          const staleness = checkIndexStaleness(lastIndexedAt, modelMetadataDir);
+          lines.push('', ...staleness.lines);
+        } catch {
+          // Freshness reporting is best-effort — never break get_workspace_info
+        }
+
+        // -----------------------------------------------------------------------
         // Stdio session info — what VS 2022 sent during the MCP handshake
         // Populated by the stdin sniffer in index.ts (always active in stdio mode).
         // -----------------------------------------------------------------------
@@ -655,11 +692,25 @@ export function registerToolHandler(server: Server, context: XppServerContext): 
       };
     }
 
-    const capped = capToolResponse(toolName, result);
+    let capped = capToolResponse(toolName, result);
     // Record metrics: detect empty result (no content or first text item is empty)
     const firstText = capped?.content?.[0]?.text;
     const isEmpty = !firstText || firstText.trim().length === 0 || firstText === 'No results returned';
     finishMetrics(isEmpty);
+
+    if (!DEDUP_EXCLUDED_TOOLS.has(toolName)) {
+      storeDedupResult(callKey, capped);
+      // Loop hint: 3+ identical calls in the recent window means the model is
+      // cycling (cache misses only happen when calls are >60 s apart).
+      if (occurrences >= 3) {
+        capped = appendNote(
+          capped,
+          `> ⚠️ Loop detected: this is occurrence #${occurrences} of the exact same ${toolName} call. ` +
+          `The answer does not change between calls. If you are missing information, ` +
+          `use a DIFFERENT tool or different parameters (see suggestions above), or ask the user.`,
+        );
+      }
+    }
     return capped;
   });
 }
