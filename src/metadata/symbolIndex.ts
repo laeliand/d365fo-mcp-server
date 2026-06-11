@@ -484,6 +484,29 @@ export class XppSymbolIndex {
       CREATE INDEX IF NOT EXISTS idx_form_datasources_model ON form_datasources(model);
     `);
 
+    // Form Patterns — mined Pattern/PatternVersion per Design node and
+    // sub-patterned container (node_path 'Design' = the form's top-level pattern).
+    // Grounds pattern recommendations ("real forms using pattern X") and
+    // cross-checks the curated catalog against actual metadata.
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS form_patterns (
+        form_name TEXT NOT NULL,
+        model TEXT NOT NULL,
+        node_path TEXT NOT NULL,
+        control_name TEXT NOT NULL DEFAULT '',
+        control_type TEXT NOT NULL DEFAULT '',
+        pattern TEXT NOT NULL,
+        pattern_version TEXT,
+        child_sequence TEXT,
+        PRIMARY KEY (form_name, node_path)
+      );
+    `);
+
+    this.db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_form_patterns_pattern ON form_patterns(pattern, pattern_version);
+      CREATE INDEX IF NOT EXISTS idx_form_patterns_model ON form_patterns(model);
+    `);
+
     // EDT Metadata - for EDT suggestion and validation
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS edt_metadata (
@@ -1595,6 +1618,39 @@ export class XppSymbolIndex {
           description: formData.caption || formData.label,
         });
 
+        // Index mined pattern nodes (Design + sub-patterned containers) and
+        // record pattern distribution stats for the advisor/cross-check.
+        if (formData.patternNodes && Array.isArray(formData.patternNodes)) {
+          const patternStmt = this.db.prepare(`
+            INSERT OR REPLACE INTO form_patterns (
+              form_name, model, node_path, control_name, control_type,
+              pattern, pattern_version, child_sequence
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `);
+          for (const node of formData.patternNodes) {
+            if (!node?.pattern || !node?.nodePath) continue;
+            patternStmt.run(
+              formName,
+              model,
+              node.nodePath,
+              node.controlName ?? '',
+              node.controlType ?? '',
+              node.pattern,
+              node.patternVersion ?? null,
+              JSON.stringify(node.childSequence ?? []),
+            );
+            if (node.nodePath === 'Design') {
+              this.recordPropertyStat('AxFormDesign', 'Pattern', node.pattern, model);
+              this.recordPropertyStat(
+                'AxFormDesign',
+                `PatternVersion:${node.pattern}`,
+                node.patternVersion ?? '(absent)',
+                model,
+              );
+            }
+          }
+        }
+
         // Index form datasources to new table
         if (formData.dataSources && Array.isArray(formData.dataSources)) {
           const stmt = this.db.prepare(`
@@ -2486,6 +2542,7 @@ export class XppSymbolIndex {
     this.db.exec('DELETE FROM symbols');
     this.db.exec('DELETE FROM table_relations');
     this.db.exec('DELETE FROM form_datasources');
+    this.db.exec('DELETE FROM form_patterns');
     this.db.exec('DELETE FROM edt_metadata');
     this.db.exec('DELETE FROM security_privilege_entries');
     this.db.exec('DELETE FROM security_duty_privileges');
@@ -2515,6 +2572,7 @@ export class XppSymbolIndex {
       this.db.prepare(`DELETE FROM symbols WHERE model IN (${placeholders})`).run(...modelNames);
       this.db.prepare(`DELETE FROM table_relations WHERE model IN (${placeholders})`).run(...modelNames);
       this.db.prepare(`DELETE FROM form_datasources WHERE model IN (${placeholders})`).run(...modelNames);
+      this.db.prepare(`DELETE FROM form_patterns WHERE model IN (${placeholders})`).run(...modelNames);
       this.db.prepare(`DELETE FROM edt_metadata WHERE model IN (${placeholders})`).run(...modelNames);
       this.db.prepare(`DELETE FROM security_privilege_entries WHERE model IN (${placeholders})`).run(...modelNames);
       this.db.prepare(`DELETE FROM security_duty_privileges WHERE model IN (${placeholders})`).run(...modelNames);

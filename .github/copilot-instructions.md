@@ -36,6 +36,8 @@ PowerShell / any terminal command **WILL HANG** in VS 2022 / VS 2026 MCP integra
 | Read class / table / form | `get_class_info` / `get_table_info` / `get_form_info` |
 | Method signature for CoC | `get_method_signature` (already returned by `prepare_change`) |
 | Validate X++ before write | `validate_xpp(code)` — offline BP check, <50 ms, 13 rules |
+| Create a NEW form | `get_form_patterns(recommend={...})` → `get_form_pattern_spec(pattern)` → `generate_smart_form(cloneFrom=referenceForm, tableMapping={...})` → `validate_form_pattern(xml)` |
+| Validate form XML against its pattern | `validate_form_pattern(xml \| formName \| filePath)` — structural errors block form writes (FORM_PATTERN_ENFORCE) |
 | Resolve label / EDT / class refs | `resolve_references(code)` |
 | Build / BP / Sync | `build_d365fo_project` / `run_bp_check` / `trigger_db_sync` |
 | Error diagnosis | `get_d365fo_error_help(errorText)` |

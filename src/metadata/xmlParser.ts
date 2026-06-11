@@ -20,6 +20,7 @@ import type {
   XppViewRelationInfo,
 } from './types.js';
 import { EnhancedXppParser } from './enhancedParser.js';
+import { walkFormDesign, collectPatternNodes } from './formPatternMiner.js';
 
 export class XppMetadataParser {
   private parser: Parser;
@@ -530,26 +531,33 @@ export class XppMetadataParser {
         label: axForm.Label || undefined,
         caption: axForm.Caption || axForm.TitleDatasource || undefined,
         formPattern: undefined, // Will be detected from Design
+        formPatternVersion: undefined,
         dataSources: [],
         design: [],
+        patternNodes: [],
         methods: [],
       };
 
-      // Extract data sources
-      if (axForm.DataSources && axForm.DataSources.length > 0) {
-        formInfo.dataSources = this.extractFormDataSources(axForm.DataSources[0]);
+      // Extract data sources (top-level <DataSources>, not the SourceCode one)
+      // xml2js with explicitArray:false yields a plain object here, never an array.
+      if (axForm.DataSources && typeof axForm.DataSources === 'object') {
+        formInfo.dataSources = this.extractFormDataSources(axForm.DataSources);
       }
 
-      // Extract design (controls)
-      if (axForm.Design && axForm.Design.length > 0) {
-        const designInfo = this.extractFormDesign(axForm.Design[0]);
+      // Extract design (controls) — Design > Controls > AxFormControl tree,
+      // including Pattern/PatternVersion on Design and on container controls.
+      if (axForm.Design && typeof axForm.Design === 'object') {
+        const designInfo = walkFormDesign(axForm.Design);
         formInfo.design = designInfo.controls;
-        formInfo.formPattern = designInfo.pattern;
+        formInfo.formPattern = designInfo.pattern || designInfo.style;
+        formInfo.formPatternVersion = designInfo.patternVersion;
+        formInfo.patternNodes = collectPatternNodes(designInfo);
       }
 
-      // Extract methods
-      if (axForm.Methods && axForm.Methods.length > 0) {
-        formInfo.methods = this.extractFormMethods(axForm.Methods[0], formName);
+      // Extract methods — form methods live under SourceCode > Methods > Method
+      const methodsNode = axForm.SourceCode?.Methods ?? axForm.Methods;
+      if (methodsNode && typeof methodsNode === 'object') {
+        formInfo.methods = this.extractFormMethods(methodsNode, formName);
       }
 
       return { success: true, data: formInfo };
@@ -567,11 +575,13 @@ export class XppMetadataParser {
   private extractFormDataSources(dataSourcesNode: any): any[] {
     const dataSources: any[] = [];
 
-    if (!dataSourcesNode.AxFormDataSourceRoot) {
+    // Form XML uses <AxFormDataSource>; AxFormDataSourceRoot kept as legacy fallback
+    const dsData = dataSourcesNode.AxFormDataSource || dataSourcesNode.AxFormDataSourceRoot;
+    if (!dsData) {
       return dataSources;
     }
 
-    const dsRoots = this.ensureArray(dataSourcesNode.AxFormDataSourceRoot);
+    const dsRoots = this.ensureArray(dsData);
 
     for (const dsNode of dsRoots) {
       const ds: any = {
@@ -608,94 +618,6 @@ export class XppMetadataParser {
     }
 
     return dataSources;
-  }
-
-  /**
-   * Extract form design (controls)
-   */
-  private extractFormDesign(designNode: any): { controls: any[]; pattern?: string } {
-    const controls: any[] = [];
-    let pattern: string | undefined = undefined;
-
-    // Detect form pattern from Design properties
-    if (designNode.Pattern) {
-      pattern = designNode.Pattern;
-    } else if (designNode.Style) {
-      // Some forms use Style instead of Pattern
-      pattern = designNode.Style;
-    }
-
-    // Find root containers
-    const rootKeys = Object.keys(designNode).filter(k => k.startsWith('AxForm'));
-
-    for (const key of rootKeys) {
-      const nodes = this.ensureArray(designNode[key]);
-      for (const node of nodes) {
-        const control = this.extractFormControl(node, key);
-        if (control) {
-          controls.push(control);
-        }
-      }
-    }
-
-    return { controls, pattern };
-  }
-
-  /**
-   * Extract single form control recursively
-   */
-  private extractFormControl(node: any, nodeType: string): any | null {
-    if (!node) return null;
-
-    const control: any = {
-      name: node.Name || 'Unknown',
-      type: nodeType.replace('AxForm', ''),
-      properties: {},
-      children: [],
-    };
-
-    // Extract common properties
-    const propertiesToExtract = [
-      'Caption',
-      'Visible',
-      'Enabled',
-      'AutoDeclaration',
-      'DataSource',
-      'DataField',
-      'DataMethod',
-      'HelpText',
-      'Label',
-      'Width',
-      'Height',
-      'AllowEdit',
-      'Mandatory',
-      'Style',
-      'Pattern',
-    ];
-
-    for (const prop of propertiesToExtract) {
-      if (node[prop]) {
-        const value = Array.isArray(node[prop]) ? node[prop][0] : node[prop];
-        if (value) {
-          control.properties[prop] = value;
-        }
-      }
-    }
-
-    // Recursively extract child controls
-    const childKeys = Object.keys(node).filter(k => k.startsWith('AxForm') && k !== nodeType);
-
-    for (const childKey of childKeys) {
-      const childNodes = this.ensureArray(node[childKey]);
-      for (const childNode of childNodes) {
-        const childControl = this.extractFormControl(childNode, childKey);
-        if (childControl) {
-          control.children.push(childControl);
-        }
-      }
-    }
-
-    return control;
   }
 
   /**

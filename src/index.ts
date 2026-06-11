@@ -785,6 +785,8 @@ async function main() {
         ]},
         { icon: '✅', category: 'Code Quality & Grounding', tools: [
           { name: 'validate_xpp',                 desc: 'Offline BP validator: 13 rules (SEL/COC/BP/XML), <50 ms, no Windows required' },
+          { name: 'validate_form_pattern',        desc: 'Form pattern validator: control hierarchy/order, sub-patterns, versions (FP001-FP010)' },
+          { name: 'get_form_pattern_spec',        desc: 'Form pattern spec: required structure, sub-patterns, reference forms to clone, lifecycle guidance' },
           { name: 'resolve_references',           desc: 'Semantic resolver: every type/field/method/label in generated code proven against the index' },
           { name: 'prepare_change',               desc: 'Single-call context aggregator: signature + CoC wrappers + grounding token' },
           { name: 'prepare_create',               desc: 'Single-call aggregator for NEW objects: collisions + naming + EDTs + labels + token' },

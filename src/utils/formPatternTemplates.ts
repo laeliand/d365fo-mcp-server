@@ -356,8 +356,6 @@ ${listFieldControls}\t\t\t\t\t\t</Controls>
 \t\t\t<AxFormControl xmlns=""
 \t\t\t\t\ti:type="AxFormGroupControl">
 \t\t\t\t<Name>DetailsGroup</Name>
-\t\t\t\t<Pattern>FieldsFieldGroups</Pattern>
-\t\t\t\t<PatternVersion>1.1</PatternVersion>
 \t\t\t\t<Type>Group</Type>
 \t\t\t\t<FormControlExtension
 \t\t\t\t\ti:nil="true" />
@@ -889,6 +887,13 @@ ${headerFieldControls}\t\t\t\t\t\t\t\t</Controls>
         `\t\t\t</AxFormControl>\n`
       : bodyFieldControls;
 
+    // FieldsFieldGroups only allows fields + one level of groups — when the
+    // body holds a Tab (sectioned dialog), the sub-pattern lives on the tab
+    // pages instead and DialogBody itself stays unpatterned.
+    const dialogBodyPattern = sections.length > 0
+      ? ''
+      : `\t\t\t\t<Pattern>FieldsFieldGroups</Pattern>\n\t\t\t\t<PatternVersion>1.1</PatternVersion>\n`;
+
     return `<?xml version="1.0" encoding="utf-8"?>
 <AxForm xmlns:i="http://www.w3.org/2001/XMLSchema-instance" xmlns="Microsoft.Dynamics.AX.Metadata.V6">
 \t<Name>${formName}</Name>
@@ -918,9 +923,7 @@ ${captionXml}\t\t<Frame xmlns="">Dialog</Frame>
 \t\t\t<AxFormControl xmlns=""
 \t\t\t\t\ti:type="AxFormGroupControl">
 \t\t\t\t<Name>DialogBody</Name>
-\t\t\t\t<Pattern>FieldsFieldGroups</Pattern>
-\t\t\t\t<PatternVersion>1.1</PatternVersion>
-\t\t\t\t<Type>Group</Type>
+${dialogBodyPattern}\t\t\t\t<Type>Group</Type>
 \t\t\t\t<FormControlExtension
 \t\t\t\t\ti:nil="true" />
 \t\t\t\t<Controls>
@@ -1381,7 +1384,22 @@ ${fieldControls}\t\t\t\t</Controls>
       `\t\t\t\t\t\t\t\t<Type>Group</Type>\n` +
       `\t\t\t\t\t\t\t\t<WidthMode>SizeToAvailable</WidthMode>\n` +
       `\t\t\t\t\t\t\t\t<FormControlExtension\n\t\t\t\t\t\t\t\t\ti:nil="true" />\n` +
-      `\t\t\t\t\t\t\t\t<Controls />\n` +
+      `\t\t\t\t\t\t\t\t<Controls>\n` +
+      `\t\t\t\t\t\t\t\t\t<AxFormControl>\n` +
+      `\t\t\t\t\t\t\t\t\t\t<Name>${sec.name}QuickFilter</Name>\n` +
+      `\t\t\t\t\t\t\t\t\t\t<FormControlExtension>\n` +
+      `\t\t\t\t\t\t\t\t\t\t\t<Name>QuickFilterControl</Name>\n` +
+      `\t\t\t\t\t\t\t\t\t\t\t<ExtensionComponents />\n` +
+      `\t\t\t\t\t\t\t\t\t\t\t<ExtensionProperties>\n` +
+      `\t\t\t\t\t\t\t\t\t\t\t\t<AxFormControlExtensionProperty>\n` +
+      `\t\t\t\t\t\t\t\t\t\t\t\t\t<Name>targetControlName</Name>\n` +
+      `\t\t\t\t\t\t\t\t\t\t\t\t\t<Type>String</Type>\n` +
+      `\t\t\t\t\t\t\t\t\t\t\t\t\t<Value>${sec.name}Grid</Value>\n` +
+      `\t\t\t\t\t\t\t\t\t\t\t\t</AxFormControlExtensionProperty>\n` +
+      `\t\t\t\t\t\t\t\t\t\t\t</ExtensionProperties>\n` +
+      `\t\t\t\t\t\t\t\t\t\t</FormControlExtension>\n` +
+      `\t\t\t\t\t\t\t\t\t</AxFormControl>\n` +
+      `\t\t\t\t\t\t\t\t</Controls>\n` +
       `\t\t\t\t\t\t\t\t<ArrangeMethod>HorizontalLeft</ArrangeMethod>\n` +
       `\t\t\t\t\t\t\t\t<FrameType>None</FrameType>\n` +
       `\t\t\t\t\t\t\t\t<Style>CustomFilter</Style>\n` +

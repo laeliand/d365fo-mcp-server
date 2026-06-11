@@ -31,6 +31,10 @@ import { ProjectFileManager, ProjectFileFinder } from './createD365File.js';
 import { normalizeD365Xml } from '../utils/d365XmlNormalizer.js';
 import { enforceGrounding } from '../utils/provenanceStore.js';
 import { gateOnReferenceErrors } from './resolveReferences.js';
+import {
+  checkAddControlAgainstParentPattern,
+  isFormPatternEnforceEnabled,
+} from './validateFormPattern.js';
 
 /**
  * Decode the standard XML entities (&lt;, &gt;, &apos;, &quot;, &amp;) and normalise
@@ -455,6 +459,53 @@ export async function modifyD365FileTool(request: CallToolRequest, context: XppS
         (args as any).parentControl = resolution.resolved;
       }
       // null → form not found or no match; proceed with original value (compiler will catch it)
+    }
+
+    // ── Form-pattern pre-flight for add-control ───────────────────────────────
+    // When the parent container declares a sub-pattern (e.g. FieldsFieldGroups),
+    // verify the new control's type is allowed there. Blocking when
+    // FORM_PATTERN_ENFORCE is enabled (default); advisory note otherwise.
+    if (
+      operation === 'add-control' &&
+      (objectType === 'form' || objectType === 'form-extension') &&
+      args.parentControl &&
+      (args as any).controlType
+    ) {
+      const baseFormName =
+        objectType === 'form'
+          ? objectName
+          : ((args as any).baseFormName || objectName.split('.')[0]);
+      const baseXml = await findBaseFormXml(baseFormName, symbolIndex);
+      if (baseXml) {
+        const verdict = await checkAddControlAgainstParentPattern(
+          baseXml,
+          args.parentControl,
+          (args as any).controlType,
+        );
+        if (verdict && !verdict.allowed) {
+          const allowedList = verdict.allowedTypes === 'any' ? 'any' : verdict.allowedTypes.join(', ');
+          if (isFormPatternEnforceEnabled()) {
+            return {
+              content: [{
+                type: 'text',
+                text:
+                  `⛔ add-control blocked — parent control "${args.parentControl}" follows sub-pattern ` +
+                  `**${verdict.parentPattern}**, which does not allow a "${(args as any).controlType}" child.\n\n` +
+                  `Allowed control types here: ${allowedList}.\n\n` +
+                  `Options:\n` +
+                  `  1. Use an allowed control type (e.g. controlType="String" for a bound field).\n` +
+                  `  2. Target a different parent container (use get_form_info to inspect the hierarchy).\n` +
+                  `  3. Set FORM_PATTERN_ENFORCE=false to bypass pattern enforcement.`,
+              }],
+              isError: true,
+            };
+          }
+          addControlNote +=
+            `\n\n> ⚠️ Pattern warning: parent "${args.parentControl}" follows ${verdict.parentPattern}, ` +
+            `which does not allow "${(args as any).controlType}" children (allowed: ${allowedList}). ` +
+            `FORM_PATTERN_ENFORCE is disabled — proceeding anyway.`;
+        }
+      }
     }
 
     // 1. Find the file
@@ -1325,7 +1376,7 @@ function allControlsFromFormXmlObj(xmlObj: any): ResolvedControl[] {
  * Locate the base form XML on disk, trying DB path → remapped path → filesystem scan.
  * Returns raw XML content, or null if not accessible.
  */
-async function findBaseFormXml(baseFormName: string, symbolIndex: any): Promise<string | null> {
+export async function findBaseFormXml(baseFormName: string, symbolIndex: any): Promise<string | null> {
   // Helper: read a file, transparently following JSON metadata proxies.
   async function tryRead(p: string): Promise<string | null> {
     try {

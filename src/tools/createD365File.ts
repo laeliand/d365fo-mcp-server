@@ -15,6 +15,7 @@ import { ensureXppDocComment, ensureBlankLineBeforeClosingBrace } from '../utils
 import { decodeXmlEntitiesFromXppSource } from './modifyD365File.js';
 import { bridgeValidateAfterWrite, canBridgeCreate, bridgeCreateObject } from '../bridge/index.js';
 import { enforceGrounding } from '../utils/provenanceStore.js';
+import { gateOnFormPatternErrors } from './validateFormPattern.js';
 import { gateOnReferenceErrors } from './resolveReferences.js';
 import { invalidateCache } from './updateSymbolIndex.js';
 import { normalizeD365Xml } from '../utils/d365XmlNormalizer.js';
@@ -4039,6 +4040,23 @@ export async function handleCreateD365File(
       '</Method>\n\n$1<Method>'
     );
 
+    // Form pattern gate: structural pattern violations (FP001-FP005, FP007)
+    // block the write when FORM_PATTERN_ENFORCE is enabled (default).
+    // Recommendations are appended to the success message instead.
+    let formPatternWarnings = '';
+    if (args.objectType === 'form') {
+      const gate = await gateOnFormPatternErrors(
+        xmlContent,
+        `create_d365fo_file(form ${finalObjectName})`,
+      );
+      if (gate.blocked) {
+        return gate.blocked;
+      }
+      if (gate.warningsText) {
+        formPatternWarnings = `\n${gate.warningsText}\n`;
+      }
+    }
+
     // Debug: Log XML content length
     const xmlSource = args.xmlContent ? 'provided by caller' : 'generated from template';
     console.error(
@@ -4213,6 +4231,7 @@ export async function handleCreateD365File(
             `📦 Model: ${actualModelName}\n` +
             `🔧 Type: ${objectFolder}\n` +
             bridgeValidation +
+            formPatternWarnings +
             projectMessage +
             `\n${nextSteps}\n` +
             `⛔ TASK COMPLETE — do NOT call \`generate_smart_table\`, \`generate_smart_form\`, or \`create_d365fo_file\` again for this object.`,

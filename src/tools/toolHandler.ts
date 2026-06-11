@@ -59,6 +59,8 @@ import { undoLastModificationTool } from './undoLastModification.js';
 import { xppKnowledgeTool } from './xppKnowledge.js';
 import { d365foErrorHelpTool } from './d365foErrorHelp.js';
 import { validateXppTool } from './validateXpp.js';
+import { validateFormPatternTool } from './validateFormPattern.js';
+import { getFormPatternSpecTool } from './getFormPatternSpec.js';
 import { resolveReferencesTool } from './resolveReferences.js';
 import { prepareChangeTool } from './prepareChange.js';
 import { prepareCreateTool } from './prepareCreate.js';
@@ -416,6 +418,10 @@ export function registerToolHandler(server: Server, context: XppServerContext): 
         return xppKnowledgeTool(request);
       case 'validate_xpp':
         return validateXppTool(request, context);
+      case 'validate_form_pattern':
+        return validateFormPatternTool(request, context);
+      case 'get_form_pattern_spec':
+        return getFormPatternSpecTool(request, context);
       case 'resolve_references':
         return resolveReferencesTool(request, context);
       case 'prepare_change':

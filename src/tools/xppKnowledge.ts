@@ -655,16 +655,20 @@ MyDocumentId newId = numSeq.num();
       'D365FO forms follow standard patterns enforced by the form pattern dialog. ' +
       'Extensions add controls/overrides without modifying the original form.',
     rules: [
-      'Standard patterns: SimpleList, SimpleListDetails, DetailsMaster, DetailsTransaction, Dialog, ListPage, TableOfContents, Lookup',
+      'Standard patterns: SimpleList, SimpleListDetails, DetailsMaster, DetailsTransaction, Dialog, DropDialog, ListPage, TableOfContents, Lookup, Workspace — each defines REQUIRED containers in a REQUIRED order',
+      'NEW FORM workflow: get_form_patterns(recommend={...}) → get_form_pattern_spec(pattern) → generate_smart_form(cloneFrom=referenceForm, tableMapping={...}) → validate_form_pattern → create_d365fo_file',
+      'CLONING an existing reference form (CustGroup for SimpleList, CustTable for DetailsMaster, SalesTable for DetailsTransaction, PaymTerm for SimpleListDetails, CustParameters for TableOfContents) is the PREFERRED strategy — patterns and sub-patterns are preserved',
+      'Container sub-patterns (Pattern element on Group/TabPage): FieldsFieldGroups (fields + max 1 level of groups, NO static text/images), CustomAndQuickFilters (QuickFilter required), ToolbarAndList, SidePanel — validate with validate_form_pattern',
+      'Structural pattern violations BLOCK create_d365fo_file while FORM_PATTERN_ENFORCE=true (default): wrong control order, missing required container, disallowed child type, unknown pattern/version',
       'ALWAYS use form extensions — never modify standard forms (overlayering is blocked)',
       'Form extension file: AxFormExtension XML — holds new controls, data sources, property overrides',
       'Form extension class: [ExtensionOf(formStr(Target))] — holds CoC logic for form methods',
       'Use get_form_info(formName, searchControl="...") to find exact control names before extending',
-      'New controls: add via modify_d365fo_file(operation="add-control", parentControl="TabGeneral")',
+      'New controls: add via modify_d365fo_file(operation="add-control", parentControl="TabGeneral") — the control type is checked against the parent container\'s sub-pattern',
       'Data sources: add via modify_d365fo_file(operation="add-data-source")',
       'NEVER use PowerShell or read_file to inspect form XML — use get_form_info',
     ],
-    related: ['coc', 'event-handlers'],
+    related: ['coc', 'event-handlers', 'formrun-lifecycle'],
   },
 
   // ── Security ────────────────────────────────────────────────────────────
@@ -2073,6 +2077,8 @@ SysQuery::findOrCreateRange(
       'Use [ExtensionOf(formStr(...))] for form-level CoC; forms cannot have static-method CoC',
       'Add data sources via modify_d365fo_file(operation="add-data-source")',
       'Add controls via modify_d365fo_file(operation="add-control", parentControl="TabGeneral")',
+      'Typical overrides per pattern — SimpleList/setup: DS initValue + validateWrite; DetailsMaster: form init + DS active/validateWrite; DetailsTransaction: lines DS initValue (defaults from header) + header DS active; Dialog: form init (read element.args()) + closeOk; Lookup: form init + DS executeQuery (caller-context filter)',
+      'generate_smart_form(includeMethodStubs=true) injects these pattern-appropriate stubs automatically; get_form_pattern_spec(pattern) lists them',
     ],
     related: ['coc', 'form-patterns'],
   },

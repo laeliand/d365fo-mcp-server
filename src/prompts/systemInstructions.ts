@@ -92,6 +92,10 @@ Use this guide to select the correct tool:
 | "Create CoC class extension" | \`create_d365fo_file(objectType="class-extension", ...)\` | find_coc_extensions |
 | "Create SSRS report" | \`generate_code(pattern="ssrs-report-full", name)\` | analyze_code_patterns |
 | "Create lookup form/method" | \`generate_code(pattern="lookup-form", name)\` | None |
+| "Create a NEW form" | \`generate_smart_form(name, cloneFrom=..., tableMapping=...)\` | get_form_patterns(recommend) + get_form_pattern_spec |
+| "Which form pattern to use?" | \`get_form_patterns(recommend={entityKind, fieldCount, usageIntent, tableName})\` | None |
+| "Form pattern structure/rules" | \`get_form_pattern_spec(pattern)\` | None |
+| "Validate form XML" | \`validate_form_pattern(xml | formName | filePath)\` | After generate_smart_form / manual edits |
 | "Create workspace form" | \`generate_smart_form(name, formPattern="Workspace")\` | None |
 | "Create business event" | \`generate_code(pattern="business-event", name)\` | None |
 | "Create custom service" | \`generate_code(pattern="custom-service", name)\` | None |
@@ -149,6 +153,13 @@ After the call, read the response: \`isError=true\` means the change did NOT app
 1. \`prepare_create(goal, objectName, objectType, fieldsHint?)\` — ONE call returns collision check, naming, similar objects, EDT suggestions, reusable labels, property defaults + \`groundingToken\`
 2. Generate the object, then \`resolve_references(code)\` + \`validate_xpp(code)\` — fix any errors in the same turn
 3. \`create_d365fo_file(..., groundingToken=...)\`
+
+**New FORMS — pattern-grounded workflow (forms have strict pattern rules; never hand-write form XML):**
+1. \`get_form_patterns(recommend={entityKind, hasHeaderLines?, fieldCount?, usageIntent, tableName?})\` — returns the right pattern + reference forms to clone
+2. \`get_form_pattern_spec(pattern)\` — required containers, ordering, sub-patterns, lifecycle methods
+3. \`generate_smart_form(name, cloneFrom="<referenceForm>", tableMapping={"<srcTable>": "<targetTable>"}, includeMethodStubs=true)\` — cloning preserves patterns/sub-patterns; template path via \`formPattern\` is the fallback
+4. \`validate_form_pattern(xml)\` — fix FP errors (FP001-FP005/FP007 BLOCK the write while FORM_PATTERN_ENFORCE=true)
+5. \`create_d365fo_file(objectType="form", ...)\` — pattern warnings are appended to the response; review them
 5. **NEVER run \`build_d365fo_project()\` automatically.** Builds take a long time and block the user. After completing changes, tell the user the changes are done and they can build manually when ready. Only run \`build_d365fo_project()\` when the user explicitly requests it ("build", "compile", "check errors"). If after a requested build there are X++ errors, fix them immediately using \`modify_d365fo_file\` and rebuild until clean.
 
 ### 4. Semantic vs. Prefix Search

@@ -15,6 +15,10 @@ import { resolveObjectPrefix, applyObjectPrefix, getObjectSuffix, applyObjectSuf
 import { ProjectFileManager } from './createD365File.js';
 import { extractModelFromProject, findProjectInSolution } from '../utils/projectUtils.js';
 import { normalizeD365Xml } from '../utils/d365XmlNormalizer.js';
+import { validateFormPatternXml } from '../validation/formPatternValidator.js';
+import { cloneFormXml } from '../utils/formCloner.js';
+import { methodStubsForPattern, injectMethodStubs } from '../knowledge/formPatterns/methodStubs.js';
+import { findBaseFormXml } from './modifyD365File.js';
 
 interface GenerateSmartFormArgs {
   name: string;
@@ -23,6 +27,9 @@ interface GenerateSmartFormArgs {
   dataSource?: string;
   formPattern?: string;
   copyFrom?: string;
+  cloneFrom?: string;
+  tableMapping?: Record<string, string>;
+  includeMethodStubs?: boolean;
   generateControls?: boolean;
   modelName?: string;
   projectPath?: string;
@@ -57,7 +64,26 @@ export const generateSmartFormTool: Tool = {
       },
       copyFrom: {
         type: 'string',
-        description: 'Optional: Copy structure from existing form (name)',
+        description: 'Optional (legacy): Copy datasource list from an existing form. Prefer cloneFrom for full-fidelity cloning.',
+      },
+      cloneFrom: {
+        type: 'string',
+        description: 'PREFERRED strategy: clone the COMPLETE XML of an existing form (full control hierarchy, ' +
+          'patterns and sub-patterns preserved), then re-bind it via tableMapping. ' +
+          'Use a Microsoft reference form for the chosen pattern (e.g. CustGroup for SimpleList, ' +
+          'PaymTerm for SimpleListDetails, CustParameters for TableOfContents). ' +
+          'Methods except classDeclaration are stripped; fields missing on target tables are dropped (reported).',
+      },
+      tableMapping: {
+        type: 'object',
+        additionalProperties: { type: 'string' },
+        description: 'With cloneFrom: map of sourceTable → targetTable, e.g. {"CustGroup": "MyPrefixRentalGroup"}. ' +
+          'Datasources are re-bound, fields not present on the target table are dropped and reported.',
+      },
+      includeMethodStubs: {
+        type: 'boolean',
+        description: 'If true, inject pattern-appropriate lifecycle method stubs ' +
+          '(form init/executeQuery/closeOk, datasource initValue/active/validateWrite) with TODO markers.',
       },
       generateControls: {
         type: 'boolean',
@@ -91,13 +117,16 @@ export async function handleGenerateSmartForm(
     dataSource,
     formPattern,
     copyFrom,
+    cloneFrom,
+    tableMapping,
+    includeMethodStubs,
     generateControls,
     modelName,
     projectPath,
     solutionPath,
   } = args;
 
-  console.log(`[generateSmartForm] Generating form: ${name}, dataSource=${dataSource}, pattern=${formPattern}, copyFrom=${copyFrom}`);
+  console.log(`[generateSmartForm] Generating form: ${name}, dataSource=${dataSource}, pattern=${formPattern}, copyFrom=${copyFrom}, cloneFrom=${cloneFrom}`);
 
   const builder = new SmartXmlBuilder();
   let dataSources: FormDataSourceSpec[] = [];
@@ -296,18 +325,107 @@ export async function handleGenerateSmartForm(
     console.log(`[generateSmartForm] Applied naming: ${name} → ${finalName}`);
   }
 
-  // Generate XML using pattern-specific template
+  // Generate XML: clone an existing form (preferred) or build from a template
   const normalizedPattern = FormPatternTemplates.normalizePattern(formPattern || 'SimpleList');
   const primaryDs = dataSources[0];
-  const xml = FormPatternTemplates.build(normalizedPattern, {
-    formName: finalName,
-    dsName: primaryDs?.name,
-    dsTable: primaryDs?.table,
-    caption: caption || label || finalName,
-    gridFields,
-  });
+  let xml: string;
+  let cloneNotes = '';
+
+  if (cloneFrom) {
+    const sourceXml = await findBaseFormXml(cloneFrom, symbolIndex);
+    if (!sourceXml) {
+      return {
+        content: [{
+          type: 'text',
+          text:
+            `❌ cloneFrom: form "${cloneFrom}" could not be read from the metadata store.\n\n` +
+            `Options:\n` +
+            `  1. Check the form name with search("${cloneFrom}", type="form").\n` +
+            `  2. Rebuild/update the symbol index if the form is new.\n` +
+            `  3. Fall back to a template: generate_smart_form(name="${name}", formPattern="...", dataSource="...").`,
+        }],
+        isError: true,
+      };
+    }
+
+    const db = symbolIndex.getReadDb();
+    const fieldStmt = db.prepare(`
+      SELECT name FROM symbols WHERE type = 'field' AND parent_name = ? COLLATE NOCASE
+    `);
+    const cloneResult = cloneFormXml(sourceXml, {
+      targetFormName: finalName,
+      tableMapping,
+      getTableFields: (table: string) => {
+        const rows = fieldStmt.all(table) as Array<{ name: string }>;
+        return rows.length > 0 ? rows.map((r) => r.name) : null; // unknown table → keep fields
+      },
+    });
+    xml = cloneResult.xml;
+
+    const noteLines: string[] = [`   Cloned from: ${cloneResult.sourceFormName}`];
+    if (cloneResult.renamedDataSources.length > 0) {
+      noteLines.push(`   Datasources re-bound: ${cloneResult.renamedDataSources.map(r => `${r.from}→${r.to}`).join(', ')}`);
+    }
+    if (cloneResult.strippedMethods.length > 0) {
+      noteLines.push(`   Methods stripped (re-add what you need via modify_d365fo_file add-method): ${cloneResult.strippedMethods.join(', ')}`);
+    }
+    if (cloneResult.droppedFields.length > 0) {
+      noteLines.push(`   ⚠️ Fields dropped (missing on target table): ${cloneResult.droppedFields.map(d => `${d.dataSource}.${d.field}`).join(', ')}`);
+    }
+    if (cloneResult.removedControls.length > 0) {
+      noteLines.push(`   ⚠️ Controls removed (bound to dropped fields): ${cloneResult.removedControls.join(', ')}`);
+    }
+    cloneNotes = `\n${noteLines.join('\n')}`;
+  } else {
+    xml = FormPatternTemplates.build(normalizedPattern, {
+      formName: finalName,
+      dsName: primaryDs?.name,
+      dsTable: primaryDs?.table,
+      caption: caption || label || finalName,
+      gridFields,
+    });
+  }
+
+  // Optional lifecycle method stubs (pattern-appropriate, with TODO markers)
+  if (includeMethodStubs) {
+    const patternInXml = xml.match(/<Pattern xmlns="">([^<]+)<\/Pattern>/)?.[1] ?? normalizedPattern;
+    const stubDsName =
+      xml.match(/<AxFormDataSource[^>]*>\s*<Name>([^<]+)<\/Name>/)?.[1] ?? primaryDs?.name ?? '';
+    const stubResult = injectMethodStubs(xml, methodStubsForPattern(patternInXml, stubDsName), stubDsName);
+    xml = stubResult.xml;
+    if (stubResult.injected.length > 0) {
+      cloneNotes += `\n   Method stubs injected: ${stubResult.injected.join(', ')}`;
+    }
+  }
 
   console.log(`[generateSmartForm] Generated XML (${xml.length} bytes)`);
+
+  // Self-test: generated XML must conform to its declared pattern.
+  //  - Template path: errors mean template/catalog drift → hard-fail.
+  //  - Clone path: a real source form may legitimately deviate from the
+  //    catalog → report, don't block here (the write gate decides per
+  //    FORM_PATTERN_ENFORCE at create time).
+  const patternReport = await validateFormPatternXml(xml);
+  const patternErrors = patternReport.violations.filter(v => v.severity === 'error');
+  if (patternErrors.length > 0) {
+    const errorList = patternErrors.map(v => `🔴 [${v.rule}] ${v.path}: ${v.excerpt}`).join('\n');
+    if (!cloneFrom) {
+      return {
+        content: [{
+          type: 'text',
+          text:
+            `❌ generate_smart_form internal error: the generated XML violates its own pattern ` +
+            `(${patternReport.pattern ?? normalizedPattern}). This indicates template/catalog drift — please report it.\n\n` +
+            errorList,
+        }],
+        isError: true,
+      };
+    }
+    cloneNotes +=
+      `\n   ⚠️ Pattern validation found ${patternErrors.length} error(s) in the cloned XML ` +
+      `(create_d365fo_file will block them while FORM_PATTERN_ENFORCE=true):\n` +
+      errorList.split('\n').map(l => `      ${l}`).join('\n');
+  }
 
   // On non-Windows (Azure/Linux) — return XML as text, no file write possible.
   if (isNonWindows) {
@@ -336,6 +454,7 @@ export async function handleGenerateSmartForm(
             `✅ Form XML generated for **${finalName}**`,
             resolvedModel ? `   Model: ${resolvedModel}` : `   ℹ️  No model resolved — no prefix applied. Pass modelName to set prefix.`,
             `   DataSources: ${dataSources.length}, Controls: ${controls.length}`,
+            cloneNotes,
             noModelNote,
             ``,
             `ℹ️  MCP server is running on Azure/Linux — file writing is handled by the local Windows companion. This is the expected hybrid workflow.`,
@@ -423,6 +542,7 @@ export async function handleGenerateSmartForm(
           `📁 File: ${normalizedPath}`,
           `📦 Model: ${resolvedModel}`,
           `📊 DataSources: ${dataSources.length}, Controls: ${controls.length}`,
+          cloneNotes,
           projectMessage,
           ``,
           `⛔ DO NOT call \`create_d365fo_file\` — the file is already written to disk.`,

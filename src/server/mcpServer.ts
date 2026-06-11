@@ -1332,7 +1332,10 @@ SourceCode format for classes: class declaration with member vars inside { }, me
         },
         {
           name: 'get_form_patterns',
-          description: 'Analyze common datasource configurations, control hierarchies, and D365FO form patterns. Filter by formPattern, dataSource table name, or similarTo form.',
+          description: 'Form pattern advisor + usage analysis. ' +
+            'RECOMMEND MODE (preferred when creating a new form): pass recommend={entityKind, hasHeaderLines, fieldCount, usageIntent, tableName} ' +
+            'to get the right pattern via the Microsoft decision tree, reference forms to clone, and the exact next generate_smart_form call. ' +
+            'ANALYSIS MODE: filter by formPattern, dataSource table name, or similarTo form.',
           inputSchema: {
             type: 'object',
             properties: {
@@ -1348,6 +1351,34 @@ SourceCode format for classes: class declaration with member vars inside { }, me
               similarTo: {
                 type: 'string',
                 description: 'Form name to find similar patterns',
+              },
+              recommend: {
+                type: 'object',
+                description: 'Pattern advisor: describe requirements, get a recommended pattern + reference forms to clone.',
+                properties: {
+                  entityKind: {
+                    type: 'string',
+                    enum: ['master', 'transaction', 'setup', 'parameters', 'inquiry', 'lookup', 'workspace', 'dialogTask'],
+                    description: 'Kind of entity: master (customers), transaction (orders+lines), setup (group tables), parameters, inquiry (read-only), lookup, workspace, dialogTask',
+                  },
+                  hasHeaderLines: {
+                    type: 'boolean',
+                    description: 'True when data is a header with line items',
+                  },
+                  fieldCount: {
+                    type: 'number',
+                    description: 'Approximate fields users see/edit per record (<10 → SimpleList, ≥10 → SimpleListDetails)',
+                  },
+                  usageIntent: {
+                    type: 'string',
+                    enum: ['maintain', 'viewOnly', 'pickValue', 'quickCreate', 'dashboard', 'wizard'],
+                    description: 'Primary user activity on the form',
+                  },
+                  tableName: {
+                    type: 'string',
+                    description: 'Main table — pulls field count and existing-form evidence from the index',
+                  },
+                },
               },
               limit: {
                 type: 'number',
@@ -1449,7 +1480,11 @@ SourceCode format for classes: class declaration with member vars inside { }, me
         },
         {
           name: 'generate_smart_form',
-          description: 'AI-driven form generation with intelligent datasource/control suggestions from pattern analysis. Strategies: copyFrom existing form, dataSource + generateControls, or formPattern application. Returns complete XML for create_d365fo_file.',
+          description: 'Pattern-aware form generation. PREFERRED strategy: cloneFrom an existing reference form ' +
+            '(full control hierarchy + patterns preserved, datasources re-bound via tableMapping). ' +
+            'Alternative: template generation via formPattern + dataSource. ' +
+            'Output is validated against the form-pattern catalog (validate_form_pattern) before returning. ' +
+            'Use get_form_patterns(recommend) first to pick the pattern and a reference form to clone.',
           inputSchema: {
             type: 'object',
             properties: {
@@ -1471,11 +1506,27 @@ SourceCode format for classes: class declaration with member vars inside { }, me
               },
               formPattern: {
                 type: 'string',
-                description: 'Optional: Form pattern (SimpleList, DetailsTransaction, etc.)',
+                description: 'Optional: Form pattern (SimpleList, SimpleListDetails, DetailsMaster, DetailsTransaction, Dialog, DropDialog, TableOfContents, Lookup, ListPage, Workspace)',
               },
               copyFrom: {
                 type: 'string',
-                description: 'Optional: Copy structure from existing form name',
+                description: 'Optional (legacy): Copy datasource list from existing form. Prefer cloneFrom.',
+              },
+              cloneFrom: {
+                type: 'string',
+                description: 'PREFERRED: clone the complete XML of an existing form (controls, patterns, sub-patterns), ' +
+                  're-bound via tableMapping. Use a Microsoft reference form for the chosen pattern ' +
+                  '(e.g. CustGroup for SimpleList, PaymTerm for SimpleListDetails, CustParameters for TableOfContents). ' +
+                  'Methods except classDeclaration are stripped; fields missing on target tables are dropped and reported.',
+              },
+              tableMapping: {
+                type: 'object',
+                additionalProperties: { type: 'string' },
+                description: 'With cloneFrom: sourceTable → targetTable map, e.g. {"CustGroup": "MyRentalGroup"}.',
+              },
+              includeMethodStubs: {
+                type: 'boolean',
+                description: 'Inject pattern-appropriate lifecycle method stubs (form init/executeQuery/closeOk, datasource initValue/active/validateWrite) with TODO markers.',
               },
               generateControls: {
                 type: 'boolean',
@@ -2030,6 +2081,56 @@ SourceCode format for classes: class declaration with member vars inside { }, me
             },
           },
           required: ['code'],
+        },
+      },
+      {
+        name: 'validate_form_pattern',
+        description:
+          'Structural validator for D365FO form patterns (<50 ms, offline). ' +
+          'Checks AxForm XML against the form-pattern catalog: required containers and their order ' +
+          '(e.g. ActionPane → Filters → Grid for SimpleList), allowed child control types, ' +
+          'sub-pattern usage on containers (FieldsFieldGroups, CustomAndQuickFilters, ToolbarAndList, …), ' +
+          'Pattern/PatternVersion validity, and datasource expectations ' +
+          '(e.g. DetailsTransaction needs header+lines datasources). ' +
+          'Returns structured violations {rule, severity, path, excerpt, fix}; rules FP001-FP010. ' +
+          'Structural errors block form writes in create_d365fo_file when FORM_PATTERN_ENFORCE=true (default). ' +
+          'Call AFTER generate_smart_form or manual form XML edits and BEFORE create_d365fo_file.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            xml: {
+              type: 'string',
+              description: 'Complete AxForm XML to validate. Provide this OR formName/filePath.',
+            },
+            formName: {
+              type: 'string',
+              description: 'Name of an indexed form — XML is loaded from the metadata store.',
+            },
+            filePath: {
+              type: 'string',
+              description: 'Explicit path to an AxForm XML file (e.g. a freshly created form not yet indexed).',
+            },
+          },
+        },
+      },
+      {
+        name: 'get_form_pattern_spec',
+        description:
+          'Full specification of a D365FO form pattern or container sub-pattern: required control hierarchy ' +
+          'with ordering, allowed child types, applicable sub-patterns per container, known PatternVersions, ' +
+          'when to use / when not to use, Microsoft reference forms to clone, and lifecycle method guidance. ' +
+          'Call BEFORE building a form (after get_form_patterns recommend mode) to know the target structure ' +
+          'and pick a cloneFrom reference form. Accepts ids, xmlNames and aliases ' +
+          '(SimpleList, DetailsMaster, Dialog, FieldsFieldGroups, "master", "transaction", …).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            pattern: {
+              type: 'string',
+              description: 'Pattern name (id, xmlName, or alias) — e.g. "SimpleList", "DetailsMaster", or a sub-pattern like "FieldsFieldGroups".',
+            },
+          },
+          required: ['pattern'],
         },
       },
       {
