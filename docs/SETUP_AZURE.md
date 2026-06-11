@@ -30,15 +30,11 @@ If you are a developer who only wants to **use** an existing server, see [SETUP.
 
 ## Architecture Overview
 
-```
-Developer's Windows VM
-  GitHub Copilot (VS 2022)
-       │
-       ├──► Azure App Service (read-only)
-       │      └── downloads xpp-metadata.db from Blob Storage on cold start
-       │
-       └──► Local write-only companion (optional, hybrid setup)
-              └── node dist/index.js --stdio
+```mermaid
+graph LR
+    COP[GitHub Copilot / Claude<br/>on the developer VM] -->|search & analysis| APP["App Service<br/>(read-only)"]
+    COP -->|file writes, hybrid| LOCAL["Local companion<br/>(write-only, stdio)"]
+    BLOB[("Blob Storage<br/>xpp-metadata.db + labels.db")] -->|cold-start download| APP
 ```
 
 **Azure resources:**
