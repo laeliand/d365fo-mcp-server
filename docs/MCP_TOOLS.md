@@ -169,4 +169,8 @@ flowchart LR
 
 ---
 
-## Tool Details
+## Tips
+- **Describe goals, not tools.** The instruction files route requests automatically — *"add a priority field to CustTable and show it on the form"* triggers the whole chain.
+- **Let the gates work.** `GROUNDING_ENFORCE` and `FORM_PATTERN_ENFORCE` (both default on) reject ungrounded or structurally invalid writes — that's the feature, not friction.
+- **Verify after writing.** `verify_d365fo_project` confirms disk + project registration in one call.
+- **Full conversations:** [USAGE_EXAMPLES.md](USAGE_EXAMPLES.md) shows seven real multi-tool scenarios end to end.
