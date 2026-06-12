@@ -4220,12 +4220,5 @@ export async function handleCreateD365File(
   }
 }
 
-export const createD365FileToolDefinition = {
-  name: 'create_d365fo_file',
-  description:
-    'Creates a physical D365FO XML file in the correct AOT package structure. ' +
-    'This tool generates the complete XML metadata file for classes, tables, enums, forms, etc. ' +
-    'and saves it to the proper location in PackagesLocalDirectory. ' +
-    'Use this instead of creating files in the project folder directly.',
-  inputSchema: CreateD365FileArgsSchema,
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.

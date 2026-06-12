@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import { execFile, spawn } from 'child_process';
 import util from 'util';
 import path from 'path';
@@ -591,52 +590,8 @@ async function spawnXppcForState(ctx: XppcBuildContext, state: BuildJobState): P
 // Tool definition
 // ---------------------------------------------------------------------------
 
-export const buildProjectToolDefinition = {
-  name: 'build_d365fo_project',
-  description: [
-    'Builds a D365FO model using the X++ compiler (xppc.exe) and returns compiler errors.',
-    'Compiles the entire model — equivalent to building the full model in Visual Studio.',
-    'By default the tool waits for the build to finish before returning, so call it ONCE per request',
-    '(do NOT poll — a single call returns the final success/failure result).',
-    'Set wait:false for fire-and-forget mode where the tool returns immediately after spawning the build',
-    'and subsequent calls report current status (legacy behaviour).',
-    'Use force:true to kill a stuck build and restart.',
-    'Use fullBuild:true to omit -incremental and recompile all elements — fixes "stale symbol" errors.',
-    'Use buildReferencedModels:true to also build custom/ISV dependencies before the target model',
-    '(reads ModuleReferences from the model descriptor; skips Microsoft standard models; builds in topological order).',
-  ].join(' '),
-  parameters: z.object({
-    modelName: z.string().optional().describe(
-      'D365FO model name to build (e.g. MyCustomModel). Auto-detected from workspace if omitted.',
-    ),
-    projectPath: z.string().optional().describe(
-      '(Legacy) Absolute path to a .rnrproj file — used only to extract the model name when modelName is not provided.',
-    ),
-    force: z.boolean().optional().describe(
-      'Kill any running build processes for this model and restart.',
-    ),
-    fullBuild: z.boolean().optional().describe(
-      'Full recompile of the TARGET model only: omits -incremental so xppc recompiles all elements. ' +
-      'When buildReferencedModels is also set, dependency models still run incremental. ' +
-      'Use when xppc reports "model element has not been successfully compiled since it was last changed".',
-    ),
-    buildReferencedModels: z.boolean().optional().describe(
-      'Before building the target model, also build all custom/ISV models it depends on ' +
-      '(from <ModuleReferences> in the model descriptor). ' +
-      'Skips Microsoft standard models. Builds in topological dependency order.',
-    ),
-    wait: z.boolean().optional().default(true).describe(
-      'When true (default), the tool BLOCKS until the build finishes and returns the final result in a single call. ' +
-      'Do not call again to poll — the agent should make exactly one tool call per requested build. ' +
-      'When false, the tool returns immediately after spawning xppc and the caller is responsible for polling ' +
-      'with a follow-up call (legacy fire-and-forget behaviour).',
-    ),
-    waitTimeoutMs: z.number().int().positive().optional().describe(
-      'Maximum time (ms) to block when wait:true before returning a "still running" snapshot. ' +
-      'Defaults to 30 minutes. The build itself continues in the background; subsequent calls will pick up the result.',
-    ),
-  }),
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.
 
 // ---------------------------------------------------------------------------
 // Render the final result of a finished build (succeeded or failed) as the

@@ -38,15 +38,8 @@ const ExtensionStrategyArgsSchema = z.object({
   ),
 });
 
-export const extensionStrategyToolDefinition = {
-  name: 'recommend_extension_strategy',
-  description:
-    'Recommends the best D365FO extensibility mechanism for a given scenario. ' +
-    'Prevents common design mistakes (e.g. using CoC where a Business Event or delegate is appropriate). ' +
-    'Returns: recommended mechanism, reasoning, risks, alternatives, and next MCP tool calls. ' +
-    'Use BEFORE writing extension code to ensure the right approach.',
-  inputSchema: ExtensionStrategyArgsSchema,
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.
 
 // ─── Decision Rules ─────────────────────────────────────────────────────────
 

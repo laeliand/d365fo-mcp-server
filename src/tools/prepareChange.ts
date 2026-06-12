@@ -346,14 +346,5 @@ export async function prepareChangeTool(request: any, context: XppServerContext)
   };
 }
 
-export const prepareChangeToolDefinition = {
-  name: 'prepare_change',
-  description:
-    'Single-round context aggregator for D365FO extension work. ' +
-    'Returns in ONE call: exact method signature, existing CoC wrappers, CoC eligibility, ' +
-    'recommended extension strategy, naming validation, and code patterns from the index. ' +
-    'Replaces the 4-step analyze→search→info→generate sequence with a single call. ' +
-    'Returns a grounding token (30-min TTL) that proves the AI used real codebase data. ' +
-    'When GROUNDING_ENFORCE=true the token is required for extension write operations.',
-  inputSchema: prepareChangeArgsSchema,
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.

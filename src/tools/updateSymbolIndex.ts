@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import fs from 'fs';
 import path from 'path';
 import { XppMetadataParser } from '../metadata/xmlParser.js';
@@ -7,15 +6,8 @@ import type { XppServerContext } from '../types/context.js';
 import type { XppSymbol } from '../metadata/types.js';
 import { bridgeRefreshProvider } from '../bridge/index.js';
 
-export const updateSymbolIndexToolDefinition = {
-  name: 'update_symbol_index',
-  description:
-    'Index a newly generated or modified D365FO XML/label file immediately so references to it work without restarting the server. ' +
-    'Also handles file DELETIONS: if the file no longer exists on disk, stale symbols + labels are cleaned up.',
-  parameters: z.object({
-    filePath: z.string().describe('The absolute path to the modified, created, or DELETED XML file')
-  })
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.
 
 /** Map AOT folder names to symbol types */
 const AOT_FOLDER_TYPE_MAP: Record<string, XppSymbol['type']> = {

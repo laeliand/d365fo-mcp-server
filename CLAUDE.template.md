@@ -38,11 +38,14 @@ Call `get_workspace_info()` before doing anything with D365FO objects.
 
 | Action | Tool |
 |--------|------|
+| Plan an extension before changing code | `prepare_change(goal, objectName, methodName?)` — signature + CoC wrappers + `groundingToken` |
+| Plan a new object before creating it | `prepare_create(goal, objectName, objectType)` — collision check + naming + `groundingToken` |
 | Create D365FO object | `create_d365fo_file` (never built-in file tools) |
 | Edit existing object | Describe change + confirm in chat, then `modify_d365fo_file` (applies immediately) |
 | Search objects | `search()` / `batch_search()` |
-| Read class/table/form | `get_class_info` / `get_table_info` / `get_form_info` |
-| Method signature (for CoC) | `get_method_signature` |
+| Read class/table/form | `get_class_info` / `get_table_info` / `get_form_info` — 2+ known names: `batch_get_info(objects[])` |
+| Validate before write | `resolve_references(code)` + `validate_xpp(code)` |
+| X++ rules & patterns | `get_xpp_knowledge(topic)` |
 | Build/BP/Sync | `build_d365fo_project` / `run_bp_check` / `trigger_db_sync` |
 | Error diagnosis | `get_d365fo_error_help(errorText)` |
 

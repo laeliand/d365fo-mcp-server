@@ -278,8 +278,5 @@ async function analyzeTableGroup(symbolIndex: any, tableGroup: string, limit: nu
   return output;
 }
 
-export const getTablePatternsToolDefinition = {
-  name: 'get_table_patterns',
-  description: '📊 Analyze common field types, index patterns, and relation structures for table groups. Helps generate smart table structures based on existing patterns. Use tableGroup for general patterns or similarTo for specific table analysis.',
-  inputSchema: GetTablePatternsArgsSchema,
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.

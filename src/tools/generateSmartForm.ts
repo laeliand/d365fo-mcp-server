@@ -128,7 +128,7 @@ export async function handleGenerateSmartForm(
 
   console.log(`[generateSmartForm] Generating form: ${name}, dataSource=${dataSource}, pattern=${formPattern}, copyFrom=${copyFrom}, cloneFrom=${cloneFrom}`);
 
-  const builder = new SmartXmlBuilder();
+  const builder = new SmartXmlBuilder(symbolIndex);
   let dataSources: FormDataSourceSpec[] = [];
   let controls: FormControlSpec[] = [];
 
@@ -325,8 +325,12 @@ export async function handleGenerateSmartForm(
     console.log(`[generateSmartForm] Applied naming: ${name} → ${finalName}`);
   }
 
-  // Generate XML: clone an existing form (preferred) or build from a template
-  const normalizedPattern = FormPatternTemplates.normalizePattern(formPattern || 'SimpleList');
+  // Generate XML: clone an existing form (preferred) or build from a template.
+  // Without an explicit pattern, default to the majority pattern mined from
+  // standard models (property_stats), falling back to SimpleList.
+  const normalizedPattern = formPattern
+    ? FormPatternTemplates.normalizePattern(formPattern)
+    : builder.defaultFormPattern();
   const primaryDs = dataSources[0];
   let xml: string;
   let cloneNotes = '';

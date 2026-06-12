@@ -49,6 +49,7 @@ export const TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
   // ── Search & discovery ────────────────────────────────────────────────────
   search:                           read('Search D365FO index'),
   batch_search:                     read('Batch search D365FO index'),
+  batch_get_info:                   read('Batch read object info'),
   search_extensions:                read('Search custom extensions'),
   find_references:                  read('Find references'),
   find_coc_extensions:              read('Find CoC extensions'),

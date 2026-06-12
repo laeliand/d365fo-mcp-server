@@ -5,7 +5,8 @@ Every new MCP tool requires changes in these files. Check each item before openi
 ## Implementation
 
 - [ ] Create `src/tools/<toolName>.ts` — tool logic + exported `*Tool(request, context?)` function
-- [ ] Export `*ToolDefinition` (input schema) or define it inline in `mcpServer.ts`
+- [ ] Define name/description/inputSchema ONLY inline in `mcpServer.ts` — do NOT export a `*ToolDefinition` duplicate (single source of truth; dead copies drift)
+- [ ] Keep descriptions SHORT and precise — they are sent to every client with the tool list; document behavior the model can't infer (gates, side effects, prohibitions), not what the enum already says
 - [ ] Add `import` + `case '<tool_name>':` in `src/tools/toolHandler.ts`
 - [ ] Add tool `ListToolsResultSchema` entry in `src/server/mcpServer.ts`
 - [ ] Add `TOOL_ANNOTATIONS` entry in `src/server/toolAnnotations.ts` (display title + readOnly/destructive hints — enforced by toolInventory test)

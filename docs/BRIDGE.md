@@ -144,6 +144,27 @@ All use the Read → Modify → `IMetaXxxProvider.Update()` pattern.
 
 ---
 
+## Resilience (retry, health-check, respawn)
+
+The TypeScript client transparently recovers from transient bridge failures:
+
+- **READ calls** (readTable, searchObjects, findReferences, …) that time out or hit a dead
+  pipe are retried with jittered exponential backoff. Before each retry the client pings the
+  child and respawns it if it is dead or wedged.
+- **WRITE calls** (createObject, addMethod, batchModify, …) are **never** retried — a
+  timed-out write may have already applied on the bridge side, and replaying it could
+  duplicate the operation. The error is surfaced immediately instead.
+- Respawns are capped per minute to avoid crash loops; past the cap the error points to the
+  bridge log (`D365FO_BRIDGE_LOG_FILE`).
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `BRIDGE_MAX_RETRIES` | `2` | Max retries for read calls on timeout/pipe error (0 = disabled) |
+| `BRIDGE_HEALTHCHECK_MS` | `0` | Idle ping interval in ms (0 = disabled) |
+| `BRIDGE_MAX_RESTARTS` | `3` | Max child respawns per 60 s before giving up |
+
+---
+
 ## Troubleshooting
 
 ### Bridge doesn't start

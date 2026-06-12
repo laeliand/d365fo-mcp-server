@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import { execFile } from 'child_process';
 import util from 'util';
 import fs from 'fs';
@@ -29,13 +28,8 @@ function toRepoRelative(repoRoot: string, absolutePath: string): string {
   return path.relative(repoRoot, absolutePath).split(path.sep).join('/');
 }
 
-export const undoLastModificationToolDefinition = {
-  name: 'undo_last_modification',
-  description: 'Undos the latest uncommitted changes or creation of a specific file by running git checkout, reverting it to its last committed state.',
-  parameters: z.object({
-    filePath: z.string().describe('The absolute path to the file to revert')
-  })
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.
 
 export const undoLastModificationTool = async (params: any, context: XppServerContext) => {
   const { filePath } = params;

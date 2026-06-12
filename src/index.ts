@@ -580,13 +580,13 @@ async function main() {
     });
 
     // Log tool count immediately (transport is already connected)
-    const totalTools = 60;
+    const totalTools = 61;
     const localToolCount = LOCAL_TOOLS.size;
     const toolCount = SERVER_MODE === 'write-only' ? localToolCount :
                      SERVER_MODE === 'read-only' ? totalTools - localToolCount : totalTools;
     const toolDesc = SERVER_MODE === 'write-only' ? `(${Array.from(LOCAL_TOOLS).join(', ')})` :
                     SERVER_MODE === 'read-only' ? '(all except local tools)' :
-                    '(8 discovery + 7 object-info + 6 intelligent + 4 smart-gen + 3 pattern-analysis + 10 security-ext + 4 file-ops + 7 sdlc-build + 4 labels + 6 code-quality)';
+                    '(9 discovery + 7 object-info + 6 intelligent + 4 smart-gen + 3 pattern-analysis + 10 security-ext + 4 file-ops + 7 sdlc-build + 4 labels + 6 code-quality)';
     console.log(`🎯 Registered ${toolCount} X++ MCP tools ${toolDesc}`);
     serverState.isReady = true;
     serverState.isHealthy = true;
@@ -677,6 +677,7 @@ async function main() {
         { icon: '🔍', category: 'Search & Discovery', tools: [
           { name: 'search',                       desc: 'Search 584K+ D365FO symbols by name or keyword' },
           { name: 'batch_search',                 desc: 'Execute multiple searches in parallel (3x faster)' },
+          { name: 'batch_get_info',               desc: 'Get detailed info for up to 10 objects in one parallel call' },
           { name: 'search_extensions',            desc: 'Search only custom/ISV models (filters out standard code)' },
           { name: 'get_class_info',               desc: 'Full class: all methods with source, inheritance, attributes' },
           { name: 'get_table_info',               desc: 'Full table: fields, indexes, relations, methods' },

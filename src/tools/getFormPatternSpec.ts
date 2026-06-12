@@ -9,7 +9,6 @@ import {
   FORM_PATTERN_CATALOG,
   resolvePattern,
   resolveSubPattern,
-  knownPatternNames,
   type NodeSpec,
   type FormPatternSpec,
   type SubPatternSpec,
@@ -24,17 +23,8 @@ export const getFormPatternSpecArgsSchema = z.object({
   ),
 });
 
-export const getFormPatternSpecToolDefinition = {
-  name: 'get_form_pattern_spec',
-  description:
-    'Returns the full specification of a D365FO form pattern (or container sub-pattern): ' +
-    'required control hierarchy with ordering, allowed child types, applicable sub-patterns per container, ' +
-    'known PatternVersions, when to use / when not to use, Microsoft reference forms to clone, ' +
-    'and FormRun/datasource lifecycle guidance. ' +
-    'Call BEFORE building a form to know the target structure, and to pick a cloneFrom reference form. ' +
-    `Known patterns: ${knownPatternNames().join(', ')}.`,
-  inputSchema: getFormPatternSpecArgsSchema,
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.
 
 function occurrenceLabel(occ: NodeSpec['occurrence']): string {
   switch (occ) {

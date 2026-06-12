@@ -514,8 +514,5 @@ async function analyzeFormPattern(symbolIndex: any, formPattern: string, limit: 
   return output;
 }
 
-export const getFormPatternsToolDefinition = {
-  name: 'get_form_patterns',
-  description: '📋 Analyze common datasource configurations, control hierarchies, and form patterns. Helps generate smart forms based on D365FO patterns. Use formPattern for general patterns, similarTo for specific form analysis, or dataSource to find forms using a table.',
-  inputSchema: GetFormPatternsArgsSchema,
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.

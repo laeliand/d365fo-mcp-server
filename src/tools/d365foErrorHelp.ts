@@ -24,16 +24,8 @@ const D365foErrorHelpArgsSchema = z.object({
   ),
 });
 
-export const d365foErrorHelpToolDefinition = {
-  name: 'get_d365fo_error_help',
-  description:
-    'Diagnose D365FO X++ compilation errors, BP warnings, and runtime exceptions. ' +
-    'Returns a plain-language explanation and corrective action. ' +
-    'Use when the compiler Output window, Error List, or runtime infolog shows an unfamiliar error. ' +
-    'Covers: CSUV*/CSU*, SYS*, BP* warnings, TTS level errors, OCC (UpdateConflict), ' +
-    'type-cast errors, "must call next", "not valid metadata element", and more.',
-  inputSchema: D365foErrorHelpArgsSchema,
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.
 
 // ─── Error Entry Type ────────────────────────────────────────────────────────
 

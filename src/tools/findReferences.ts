@@ -526,8 +526,5 @@ function groupByReferenceType(references: Reference[]): Record<string, Reference
   return groups;
 }
 
-export const findReferencesToolDefinition = {
-  name: 'find_references',
-  description: '🔍 Find all usages of a symbol (method, class, field, table, enum). Shows where the symbol is called, extended, implemented, or referenced. Critical for understanding impact before making changes. Use this instead of code_search which hangs on large workspaces.',
-  inputSchema: FindReferencesArgsSchema,
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.

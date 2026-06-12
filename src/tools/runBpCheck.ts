@@ -1,4 +1,3 @@
-import { z } from 'zod';
 import { execFile } from 'child_process';
 import util from 'util';
 import path from 'path';
@@ -11,17 +10,8 @@ const execFileAsync = util.promisify(execFile);
 // Keyword that xppbp.exe prints when it doesn't recognise the arguments
 const HELP_TEXT_PATTERN = /^usage:|BPCheck Tool|^xppbp\.exe|unrecognized|missing required|X\+\+ Best Practice Options/im;
 
-export const runBpCheckToolDefinition = {
-  name: 'run_bp_check',
-  description: 'Runs xppbp.exe against the project to enforce Microsoft Best Practices.',
-  parameters: z.object({
-    projectPath: z.string().optional().describe('The absolute path to the .rnrproj file to check. Auto-detected from .mcp.json if omitted.'),
-    targetFilter: z.string().optional().describe('Optional: filter results to a specific object name (class, table, form, enum, ...).'),
-    targetElementType: z.string().optional().describe('Element type for the filter, used with xppbp 10.0.24+ (equals-style CLI). Common values: class, table, form, enum, view, query. Defaults to "class" when targetFilter is set but targetElementType is omitted.'),
-    modelName: z.string().optional().describe('Model name to check. Auto-detected from .mcp.json if omitted.'),
-    packagePath: z.string().optional().describe('PackagesLocalDirectory root. Auto-detected if omitted.')
-  })
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.
 
 /**
  * Attempt to run xppbp.exe with a given set of args.

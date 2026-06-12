@@ -127,28 +127,5 @@ export async function getLabelInfoTool(request: CallToolRequest, context: XppSer
   }
 }
 
-export const getLabelInfoToolDefinition = {
-  name: 'get_label_info',
-  description:
-    'Get all language translations for a specific D365FO label ID, or list available AxLabelFile IDs for a model. ' +
-    'Returns the X++ reference syntax (@LabelFileId:LabelId) and usage examples.',
-  inputSchema: {
-    type: 'object',
-    properties: {
-      labelId: {
-        type: 'string',
-        description:
-          'Exact label ID (e.g. MyFeature). Omit to list available label files.',
-      },
-      labelFileId: {
-        type: 'string',
-        description: 'Label file ID (e.g. ContosoExt, SYS)',
-      },
-      model: {
-        type: 'string',
-        description: 'Model to filter by (e.g. ContosoExt)',
-      },
-    },
-    required: [],
-  },
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.

@@ -39,18 +39,8 @@ export const resolveReferencesArgsSchema = z.object({
   ),
 });
 
-export const resolveReferencesToolDefinition = {
-  name: 'resolve_references',
-  description:
-    'Semantic reference resolver (<200 ms, index-only) — verifies that every type, ' +
-    'table field, method (incl. arity), enum, label and intrinsic target (tableStr, ' +
-    'fieldStr, classStr, …) in generated X++ code EXISTS in the indexed codebase. ' +
-    'Catches hallucinated symbols BEFORE the compiler does. ' +
-    'Call AFTER generating code and BEFORE create_d365fo_file / modify_d365fo_file. ' +
-    'Returns {kind, severity, line, identifier, detail}[] — fix errors in the same turn. ' +
-    'When GROUNDING_ENFORCE=true, write tools run this check internally and reject code with errors.',
-  inputSchema: resolveReferencesArgsSchema,
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts — the single source of truth for tool instructions.
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 

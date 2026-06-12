@@ -488,7 +488,7 @@ export async function handleGenerateSmartReport(
     type: resolveFieldType(f.edt, rdb),
   }));
 
-  const builder = new SmartXmlBuilder();
+  const builder = new SmartXmlBuilder(symbolIndex);
   const tmpTableXml = builder.buildTableXml({
     name: tmpTableName,
     label: `${reportCaption} (temp)`,

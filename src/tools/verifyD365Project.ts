@@ -292,12 +292,5 @@ export async function verifyD365ProjectTool(
   }
 }
 
-export const verifyD365ProjectToolDefinition = {
-  name: 'verify_d365fo_project',
-  description:
-    'Verify that D365FO objects exist on disk at the correct AOT path and are referenced ' +
-    'in the Visual Studio project (.rnrproj) file. ' +
-    'Use this INSTEAD OF PowerShell to check whether create_d365fo_file placed files correctly. ' +
-    'Reports ✅/❌ for each object on both disk presence and project inclusion.',
-  inputSchema: VerifyD365ProjectArgsSchema,
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.

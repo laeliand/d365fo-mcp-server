@@ -1485,23 +1485,8 @@ async function resolveParentControl(
   return { multiple: matches };
 }
 
-export const modifyD365FileToolDefinition = {
-  name: 'modify_d365fo_file',
-  description:
-    '✏️ Edit existing D365FO XML files (AxClass, AxTable, AxTableExtension, AxForm, AxFormExtension, etc.). ' +
-    'Supports atomic operations:\n' +
-    '• Methods: add-method, remove-method (table, form, class, table-extension, class-extension). add-method updates an existing method in place when the name already exists, preserving method order.\n' +
-    '• Fields: add-field, modify-field, rename-field, replace-all-fields, remove-field (table, table-extension)\n' +
-    '• Indexes: add-index, remove-index (table, table-extension)\n' +
-    '• Relations: add-relation, remove-relation (table, table-extension)\n' +
-    '• Field groups: add-field-group, remove-field-group, add-field-to-field-group (table, table-extension)\n' +
-    '• Table-extension only: add-field-modification (modify base-table field label/mandatory)\n' +
-    '• Form-extension: add-control (UI control), add-data-source (DataSourceReference)\n' +
-    '• Any object: modify-property\n' +
-    'Always prefer this tool over replace_string_in_file for XML edits.\n' +
-    'Pass addToProject=true to also register the file in the Visual Studio .rnrproj (useful when the extension file existed on disk but was not yet in the project).',
-  inputSchema: ModifyD365FileArgsSchema,
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.
 
 /**
  * Resolve the primitive base type for an EDT by walking the edt_metadata chain.

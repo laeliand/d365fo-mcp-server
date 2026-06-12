@@ -17,10 +17,7 @@ import {
   type FormPatternReport,
   type FormPatternViolation,
 } from '../validation/formPatternValidator.js';
-import {
-  knownPatternNames,
-  resolveSubPattern,
-} from '../knowledge/formPatterns/index.js';
+import { resolveSubPattern } from '../knowledge/formPatterns/index.js';
 import {
   walkFormDesign,
   type FormControlNode,
@@ -40,19 +37,8 @@ export const validateFormPatternArgsSchema = z.object({
   ),
 });
 
-export const validateFormPatternToolDefinition = {
-  name: 'validate_form_pattern',
-  description:
-    'Structural validator for D365FO form patterns (<50 ms, offline). ' +
-    'Checks AxForm XML against the form-pattern catalog: required containers and their order ' +
-    '(e.g. ActionPane → Filters → Grid for SimpleList), allowed child control types, ' +
-    'sub-pattern usage on containers (FieldsFieldGroups, CustomAndQuickFilters, …), ' +
-    'Pattern/PatternVersion validity, and datasource expectations (e.g. DetailsTransaction needs header+lines). ' +
-    'Returns structured violations {rule, severity, path, excerpt, fix}; rules FP001-FP010. ' +
-    'Call AFTER generate_smart_form / manual form XML edits and BEFORE create_d365fo_file. ' +
-    `Known patterns: ${knownPatternNames().join(', ')}.`,
-  inputSchema: validateFormPatternArgsSchema,
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.
 
 // ── Formatting ──────────────────────────────────────────────────────────────
 

@@ -453,8 +453,5 @@ function formatOutput(
   };
 }
 
-export const getMethodSignatureToolDefinition = {
-  name: 'get_method_signature',
-  description: '🔧 Extract exact method signature for Chain of Command (CoC) extensions. Returns method modifiers, return type, parameters with types, and generates ready-to-use CoC template. Essential for creating extensions without signature mismatches.',
-  inputSchema: GetMethodSignatureArgsSchema,
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.

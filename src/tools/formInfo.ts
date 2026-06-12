@@ -575,8 +575,5 @@ function countControls(controls: FormControl[]): number {
   return count;
 }
 
-export const getFormInfoToolDefinition = {
-  name: 'get_form_info',
-  description: '📋 Extract form structure: controls, datasources, methods. Returns control hierarchy with properties, datasource configuration (table, permissions, fields), and form methods. Essential for understanding form layout and adding controls or datasource methods.',
-  inputSchema: GetFormInfoArgsSchema,
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.

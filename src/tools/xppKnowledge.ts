@@ -24,17 +24,8 @@ const XppKnowledgeArgsSchema = z.object({
   ),
 });
 
-export const xppKnowledgeToolDefinition = {
-  name: 'get_xpp_knowledge',
-  description:
-    'Queryable knowledge base of D365FO X++ patterns, best practices, and AX2012→D365FO migration guidance. ' +
-    'Returns distilled, verified patterns with code examples. Use BEFORE generating code to avoid deprecated ' +
-    'APIs and AX2012 anti-patterns. Topics: batch jobs, transactions, queries, CoC/extensions, security, ' +
-    'data entities, temp tables, number sequences, form patterns, set-based operations, error handling, ' +
-    'SysOperation framework, inventory management, feature management, dual-write, DMF, ' +
-    'warehouse management, trade agreements, configuration keys, Power Platform integration, and more.',
-  inputSchema: XppKnowledgeArgsSchema,
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.
 
 // ─── Knowledge Entry Type ───────────────────────────────────────────────────
 
@@ -644,6 +635,49 @@ MyDocumentId newId = numSeq.num();
       },
     ],
     related: ['transactions'],
+  },
+
+  // ── Workflow Development ────────────────────────────────────────────────
+  {
+    id: 'workflow',
+    title: 'Workflow Development (WorkflowDocument, WorkflowType)',
+    keywords: ['workflow', 'workflowdocument', 'workflowtype', 'workflowapproval', 'workflowtask', 'approval', 'submit', 'cansubmittoworkflow'],
+    summary:
+      'D365FO workflows are built from a Document (condition fields), a Type, Approvals/Tasks, ' +
+      'and event handlers. Structure: Document → Type → Approvals/Tasks → EventHandlers.',
+    rules: [
+      'Key base classes: WorkflowDocument, WorkflowType, WorkflowApproval, WorkflowTask',
+      'WorkflowDocument subclass defines which table fields are available as workflow conditions',
+      'SubmitToWorkflowMenuItem action menu item provides the submit button on the form',
+      'canSubmitToWorkflow() method on the table controls when submit is enabled',
+      'Approval/Task event handlers use WorkflowWorkItemActionManager for complete/reject/delegate',
+      'Call search("WorkflowDocument", type="class") for real implementations to model after',
+    ],
+    related: ['event-handlers', 'sysoperation'],
+  },
+
+  // ── Best Practice (BP) checker rules ────────────────────────────────────
+  {
+    id: 'bp-rules',
+    title: 'Best Practice (BP) Rules — Generated Code Must Be BP-Clean',
+    keywords: ['bp', 'best practice', 'bpupgradecodetoday', 'bperrorlabelistext', 'bperroredtnotmigrated', 'bpcheck', 'xmldoc', 'doc comment', 'alternate key', 'edt extension', 'stringsize', 'hardcoded string'],
+    summary:
+      'All generated X++ and metadata must pass the D365FO Best Practice checker without warnings. ' +
+      'These are the BP rules the offline validator (validate_xpp) and xppbp.exe enforce most often.',
+    rules: [
+      'BPUpgradeCodeToday: NEVER use today() — use DateTimeUtil::getToday(DateTimeUtil::getUserPreferredTimeZone()); applies to default parameters, comparisons, and queries',
+      'NEVER call a function inside a WHERE condition — assign to a local variable first, then use the variable',
+      'BPErrorLabelIsText: no literal strings in Info()/warning()/error() or labels — use @ModelName:LabelId; check search_labels() first, create with create_label()',
+      'BPErrorUnknownLabel: create_label() BEFORE referencing the label in code; create_label adds AxLabelFile descriptors to the VS project automatically (addToProject=true)',
+      'BPErrorEDTNotMigrated: a field whose EDT carries an implicit relation (ItemId → InventTable) needs an explicit <AxTableRelation>; generate_smart_table auto-detects these — manual field adds need a matching relation too',
+      'BPCheckNestedLoopinCode: never nest while select inside while select — use join, temp table, or Map pre-load; report DP classes use insert_recordset or a single joined query',
+      'BPCheckAlternateKeyAbsent: every table needs at least one index with <AlternateKey>Yes</AlternateKey> (generate_smart_table adds it automatically)',
+      'BPXmlDocNoDocumentationComments: every public/protected class and method needs a MEANINGFUL /// <summary> — "MyClass class." or "validateWrite." fail BP review; describe what it does, parameters, and the semantic meaning of the return value',
+      'EDT extensions (AxEdtExtension, objectType="edt-extension") can ONLY change Label, HelpText, FormHelp, ConfigurationKey, HelpAlign, Alignment, NoOfDecimals, DecimalSeparator, SignDisplay — and only when the base EDT has IsExtensible=Yes',
+      'EDT extensions can NEVER change Extends (re-parenting) or StringSize/DisplayLength on a derived EDT — to widen a string, create a new EDT extending the existing one, or use a table extension modify-field with stringSize (mind databaseStringSize so data is not truncated)',
+      'The modify_d365fo_file validator refuses illegal EDT-extension property changes up-front — relay the message verbatim, do not work around it',
+    ],
+    related: ['labels', 'deprecated', 'set-based'],
   },
 
   // ── Form Patterns ───────────────────────────────────────────────────────

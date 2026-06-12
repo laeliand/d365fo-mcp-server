@@ -1,10 +1,10 @@
-# Tool Reference — 60 Tools
+# Tool Reference — 61 Tools
 
 Every tool the server exposes, grouped by purpose. The AI agent picks tools automatically — the *example prompts* show what to ask to trigger them; you never name tools yourself.
 
 > **C# bridge first:** on Windows D365FO VMs, 16 read tools query the live `IMetadataProvider` (always-fresh metadata) and `DYNAMICSXREFDB` (compiler-resolved cross-references), falling back to SQLite transparently on Azure/Linux. All write operations go exclusively through the bridge. See [BRIDGE.md](BRIDGE.md) and [SQLITE_DEPENDENCY.md](SQLITE_DEPENDENCY.md).
 >
-> **Server modes:** `full` = all 60 tools · `read-only` (Azure) = search/analysis only · `write-only` (hybrid companion) = file operations + bridge-backed reads. See [MCP_CONFIG.md](MCP_CONFIG.md).
+> **Server modes:** `full` = all 61 tools · `read-only` (Azure) = search/analysis only · `write-only` (hybrid companion) = file operations + bridge-backed reads. See [MCP_CONFIG.md](MCP_CONFIG.md).
 
 ---
 
@@ -40,12 +40,13 @@ flowchart LR
 
 ---
 
-## 🔍 Search & Discovery (8)
+## 🔍 Search & Discovery (9)
 
 | Tool | What it does | Example prompt |
 |------|--------------|----------------|
 | `search` † | Search 580K+ symbols by name or keyword (FTS5, < 10 ms) | *"Find classes related to sales order posting"* |
 | `batch_search` | Multiple searches in one round-trip (3× faster) | *"Look up CustTable, SalesLine and PaymTerm at once"* |
+| `batch_get_info` | Detailed info for up to 10 known objects in one parallel call | *"Get full details of CustTable, SalesLine and CustInvoiceJour"* |
 | `search_extensions` | Search only custom/ISV models (filters out Microsoft code) | *"What extensions do we have on VendTable?"* |
 | `get_class_info` † | Full class: methods with source, inheritance, attributes | *"Show me the structure of SalesFormLetter"* |
 | `get_table_info` † | Full table: fields, indexes, relations, methods | *"What fields and indexes does CustTrans have?"* |

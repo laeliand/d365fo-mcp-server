@@ -259,14 +259,5 @@ export async function prepareCreateTool(request: any, context: XppServerContext)
   };
 }
 
-export const prepareCreateToolDefinition = {
-  name: 'prepare_create',
-  description:
-    'Single-round context aggregator for creating NEW D365FO objects (mirror of prepare_change). ' +
-    'Returns in ONE call: name collision check, naming validation with the auto-applied prefix, ' +
-    'similar existing objects to copy patterns from, EDT suggestions for planned fields, ' +
-    'reusable labels, mined property defaults (standard-model statistics), and a grounding token. ' +
-    'Replaces the search → validate_object_naming → suggest_edt → search_labels sequence with one call. ' +
-    'Call BEFORE generating any new object.',
-  inputSchema: prepareCreateArgsSchema,
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.

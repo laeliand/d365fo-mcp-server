@@ -5,6 +5,7 @@ import { getConfigManager } from '../utils/configManager.js';
 import { SERVER_MODE, LOCAL_TOOLS } from '../server/serverMode.js';
 import { searchTool } from './search.js';
 import { batchSearchTool } from './batchSearch.js';
+import { batchGetInfoTool } from './batchGetInfo.js';
 import { classInfoTool } from './classInfo.js';
 import { tableInfoTool } from './tableInfo.js';
 import { completionTool } from './completion.js';
@@ -283,6 +284,8 @@ export function registerToolHandler(server: Server, context: XppServerContext): 
         return searchTool(request, context);
       case 'batch_search':
         return batchSearchTool(request, context);
+      case 'batch_get_info':
+        return batchGetInfoTool(request, context);
       case 'search_extensions':
         return extensionSearchTool(request, context);
       case 'get_class_info':

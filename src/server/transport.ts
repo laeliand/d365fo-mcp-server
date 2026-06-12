@@ -43,7 +43,7 @@ const HEAVY_TOOLS = new Set<string>([
 ]);
 
 const FAST_TOOLS = new Set<string>([
-  'search', 'batch_search',
+  'search', 'batch_search', 'batch_get_info',
   'get_class_info', 'get_table_info', 'get_form_info',
   'get_edt_info', 'get_enum_info', 'get_menu_item_info',
   'get_view_info', 'get_query_info', 'get_report_info',

@@ -44,7 +44,34 @@ export interface FormControlSpec {
   children?: FormControlSpec[];
 }
 
+/**
+ * Read-only view of the mined property_stats table (XppSymbolIndex satisfies
+ * this structurally). Populated during build-database from standard Microsoft
+ * models, so majority values track the indexed platform version — a reindex of
+ * a new PU updates the defaults without touching this code.
+ */
+export interface MinedPropertyStats {
+  getPropertyValueDistribution(
+    nodeType: string,
+    property: string,
+    limit?: number,
+  ): Array<{ value: string; count: number }>;
+}
+
 export class SmartXmlBuilder {
+  /** When omitted (or the stats are empty) the builder falls back to its static, BP-validated defaults. */
+  constructor(private readonly stats?: MinedPropertyStats) {}
+
+  /** Majority value mined from standard models, or undefined when no statistics exist. */
+  private minedMajority(nodeType: string, property: string): string | undefined {
+    try {
+      const dist = this.stats?.getPropertyValueDistribution(nodeType, property, 1) ?? [];
+      return dist[0]?.value;
+    } catch {
+      return undefined; // stats are best-effort — never fail generation
+    }
+  }
+
   /**
    * Build AxTable XML with fields, indexes, and relations.
    * Structure validated against real D365FO AOT XML (K:\AosService\PackagesLocalDirectory).
@@ -121,7 +148,11 @@ export class SmartXmlBuilder {
     //   Reference       — shared reference/lookup data across modules
     //   Framework       — internal Microsoft framework / infrastructure tables
     // For TempDB/InMemory tables the group is typically 'Main' (matches real D365FO Tmp tables).
-    const effectiveTableGroup = tableGroup || 'Main';
+    // Regular tables without an explicit group default to the majority value mined from
+    // the indexed standard models (property_stats); 'Main' is the static fallback.
+    const effectiveTableGroup = tableGroup
+      || (isTempTable ? 'Main' : this.minedMajority('AxTable', 'TableGroup'))
+      || 'Main';
 
     // BP rule: CacheLookup — set based on TableGroup to avoid BP warning "CacheLookup should be set".
     // TempDB tables reside in SQL TempDB and are session-scoped → CacheLookup=None (never cache).
@@ -313,7 +344,7 @@ export class SmartXmlBuilder {
     const primaryDs = dataSources[0];
     const pattern: FormPattern = formPattern
       ? FormPatternTemplates.normalizePattern(formPattern)
-      : 'SimpleList';
+      : this.defaultFormPattern();
 
     return FormPatternTemplates.build(pattern, {
       formName: name,
@@ -325,6 +356,17 @@ export class SmartXmlBuilder {
       linesDsName,
       linesDsTable,
     });
+  }
+
+  /**
+   * Default form pattern when the caller does not specify one: the most common
+   * AxFormDesign.Pattern mined from the indexed standard models, normalized to
+   * a supported template. Static fallback: SimpleList (most common for new
+   * setup/configuration tables).
+   */
+  defaultFormPattern(): FormPattern {
+    const mined = this.minedMajority('AxFormDesign', 'Pattern');
+    return mined ? FormPatternTemplates.normalizePattern(mined) : 'SimpleList';
   }
 
   /**

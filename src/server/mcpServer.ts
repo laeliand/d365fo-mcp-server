@@ -313,6 +313,36 @@ export function createXppMcpServer(context: XppServerContext): Server {
           },
         },
         {
+          name: 'batch_get_info',
+          description: 'Get detailed metadata for multiple D365FO objects in ONE call — the batch counterpart of get_class_info/get_table_info/get_form_info/etc. All lookups run in parallel. Use when you already know 2+ exact object names instead of calling the individual get_*_info tools one by one.',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              objects: {
+                type: 'array',
+                minItems: 1,
+                maxItems: 10,
+                description: 'Objects to fetch in parallel (max 10)',
+                items: {
+                  type: 'object',
+                  properties: {
+                    name: { type: 'string', description: 'Exact object name (use search/batch_search first if unsure)' },
+                    type: {
+                      type: 'string',
+                      enum: ['class', 'table', 'form', 'query', 'view', 'enum', 'edt', 'report',
+                        'data-entity', 'menu-item', 'table-extension',
+                        'security-privilege', 'security-duty', 'security-role'],
+                      description: 'Object type — selects the underlying get_*_info tool',
+                    },
+                  },
+                  required: ['name', 'type'],
+                },
+              },
+            },
+            required: ['objects'],
+          },
+        },
+        {
           name: 'search_extensions',
           description: 'Search only custom/ISV objects, filtering out Microsoft standard code. Model names in results are SOURCE models — never use them as target for create/modify operations.',
           inputSchema: {
@@ -368,7 +398,7 @@ export function createXppMcpServer(context: XppServerContext): Server {
         },
         {
           name: 'generate_code',
-          description: 'Generate X++ code from patterns. Call analyze_code_patterns first, then generate_code, then create_d365fo_file. Patterns: batch-job, sysoperation, class, runnable, event-handler, table-extension, class-extension, form-handler, form-datasource-extension, form-control-extension, security-privilege, menu-item, ssrs-report-full, lookup-form, dialog-box, dimension-controller, number-seq-handler, data-entity, data-entity-staging, service-class-ais, business-event, custom-telemetry, feature-class, composite-entity, custom-service, er-custom-function, map-extension, display-menu-controller.',
+          description: 'Generate X++ code from a named pattern (see pattern enum). Call analyze_code_patterns first, then generate_code, then create_d365fo_file.',
           inputSchema: {
             type: 'object',
             properties: {
@@ -382,21 +412,10 @@ export function createXppMcpServer(context: XppServerContext): Server {
                   'display-menu-controller', 'data-entity-staging', 'service-class-ais',
                   'form-datasource-extension', 'form-control-extension', 'map-extension',
                 ],
-                description: 'Code pattern to generate. ' +
-                  'class-extension: [ExtensionOf(classStr(...))] CoC class skeleton. ' +
-                  'table-extension: [ExtensionOf(tableStr(...))] with validateWrite/insert/update. ' +
-                  'form-handler: [ExtensionOf(formStr(...))] wrapping form-level methods (init, close). ' +
-                  'form-datasource-extension: [ExtensionOf(formDataSourceStr(Form, DS))] — wraps DS methods (init, executeQuery, active, write, validateWrite). Pass name=FormName, baseName=DataSourceName. ' +
-                  'form-control-extension: [ExtensionOf(formControlStr(Form, Control))] — wraps control methods (modified, validate, lookup). Pass name=FormName, baseName=ControlName. ' +
-                  'map-extension: [ExtensionOf(mapStr(...))] for X++ maps. ' +
-                  'ssrs-report-full: DataContract + DP + Controller trio. ' +
-                  'lookup-form: SysTableLookup static method. ' +
-                  'dialog-box: Dialog class with prompt()/parm* methods. ' +
-                  'dimension-controller: DimensionDefaultingController with form hooks. ' +
-                  'number-seq-handler: NumberSeqFormHandler + CoC on loadModule() + CompanyInfo extension. ' +
-                  'display-menu-controller: MenuFunction::main routing class. ' +
-                  'data-entity-staging: copyCustomStagingToTarget() + DMFTransferStatus. ' +
-                  'service-class-ais: CRUD service class + DataContract with [SysEntryPointAttribute].',
+                description: 'Pattern to generate. CoC skeletons: class-extension, table-extension, form-handler (form-level methods), ' +
+                  'form-datasource-extension (name=FormName, baseName=DataSourceName), form-control-extension (name=FormName, baseName=ControlName), map-extension. ' +
+                  'Other: ssrs-report-full (Contract+DP+Controller), lookup-form, dialog-box, dimension-controller, ' +
+                  'number-seq-handler, display-menu-controller, data-entity-staging, service-class-ais (CRUD service + contract).',
               },
               name: { type: 'string', description: 'Name for the generated element. For extensions: base element name. For form-datasource-extension / form-control-extension: the FORM name.' },
               modelName: { type: 'string', description: 'Actual model name from .mcp.json (auto-detected from EXTENSION_PREFIX env var if omitted). NEVER use generic placeholders like "MyModel".' },
@@ -488,18 +507,11 @@ export function createXppMcpServer(context: XppServerContext): Server {
         },
         {
           name: 'create_d365fo_file',
-          description: `Create D365FO AOT object file (.xml) in the correct PackagesLocalDirectory location with proper XML structure and UTF-8 BOM. Auto-adds to VS project (.rnrproj).
+          description: `Create a D365FO AOT object file (.xml) in the correct PackagesLocalDirectory location (UTF-8 BOM, auto-added to .rnrproj).
 
-⚠️ THIS IS THE WRITE/COMPLETION STEP. Analysis tools (analyze_code_patterns, search, get_class_info/get_table_info, generate_code/generate_smart_*) only PREPARE the design — they do NOT create anything on disk. Once the design is known, you MUST CALL create_d365fo_file to actually write the file. Do NOT stop after analysis or after presenting generated code: the task is incomplete until this tool has run and returned success (isError=false).
+⚠️ THIS IS THE WRITE STEP — analysis/generate tools only prepare the design; the task is incomplete until this tool returns isError=false. Never treat a ⚠️/❌ response as success.
 
-On error this tool returns isError=true with a message (e.g. file already exists, Microsoft model blocked). Read it and fix/retry — never treat a ⚠️/❌ response as success.
-
-Object types: class, table, enum, form, query, view, data-entity, report, edt, security-privilege, security-duty, security-role, menu-item-display/action/output, menu, table/class/form/enum/edt/data-entity-extension, menu-item-*-extension, menu-extension, business-event, tile, kpi.
-
-For extensions: objectName="BaseObject.PrefixExtension" (e.g. "CustTable.ContosoExtension").
-Model name auto-detected from .mcp.json. Object name prefix auto-applied from EXTENSION_PREFIX.
-
-SourceCode format for classes: class declaration with member vars inside { }, methods after closing }.`,
+Extensions: objectName="BaseObject.PrefixExtension" (e.g. "CustTable.ContosoExtension"). Model from .mcp.json; prefix auto-applied from EXTENSION_PREFIX. Classes: member vars inside the class { }, methods after the closing }.`,
           inputSchema: {
             type: 'object',
             properties: {
@@ -515,23 +527,17 @@ SourceCode format for classes: class declaration with member vars inside { }, me
                   'business-event', 'tile', 'kpi',
                 ],
                 description:
-                  'Type of D365FO object to create. ' +
-                  'class-extension: [ExtensionOf(classStr(...))] final class skeleton. ' +
-                  'Security types: security-privilege → AxSecurityPrivilege, ' +
-                  'security-duty → AxSecurityDuty, security-role → AxSecurityRole. ' +
-                  'NEVER use security-privilege for a duty or role — each maps to its own AOT folder. ' +
-                  'Menu items: menu-item-display/action/output → AxMenuItemDisplay/Action/Output. ' +
-                  'business-event: BusinessEventsBase class + companion BusinessEventsContract. ' +
-                  'tile: AxTile XML (TileType, MenuItemName, Size, RefreshFrequency). ' +
-                  'kpi: AxKPI XML (Measure, MeasureDimension, Goal, GoalType).'
+                  'Type of D365FO object to create. Each security/menu-item type maps to its own AOT folder — ' +
+                  'NEVER use security-privilege for a duty or role. ' +
+                  'class-extension = [ExtensionOf] final class skeleton; business-event = BusinessEventsBase + Contract pair.'
               },
               objectName: {
                 type: 'string',
-                description: 'Base name WITHOUT model prefix (e.g., "InventoryByZones", "ProcessOrdersBatch"). The tool auto-prepends the prefix derived from EXTENSION_PREFIX env var (or modelName as fallback). Double-prefix prevention: if you already include the prefix, the tool detects it and uses name as-is. EXTENSION_PREFIX always has priority over modelName for prefix resolution. FOR EXTENSION CLASSES (ending with "_Extension"): pass only the BASE class name + "_Extension" without ANY prefix infix — e.g. "SalesFormLetter_Extension" (not "SalesFormLetterSomePrefix_Extension"). The tool injects the correct prefix infix automatically, e.g. "SalesFormLetterMY_Extension". NEVER bypass this tool to work around prefix handling.'
+                description: 'Base name WITHOUT model prefix — the tool prepends it from EXTENSION_PREFIX (priority) or modelName, and detects an already-present prefix. Extension classes: pass "{Base}_Extension" with NO prefix infix (e.g. "SalesFormLetter_Extension" → tool produces "SalesFormLetterMY_Extension"). NEVER hand-build the prefix.'
               },
               modelName: {
                 type: 'string',
-                description: 'Actual model name (e.g., "ContosoExt", "ApplicationSuite") — determines object naming prefix. Auto-detected from .mcp.json if omitted. ALWAYS read from get_workspace_info() when calling explicitly. NEVER guess or use placeholders like "MyModel". DO NOT use model names from search results — those are source models of existing objects, not your target model.'
+                description: 'Target model name — auto-detected from .mcp.json if omitted. NEVER guess, use placeholders, or take model names from search results (those are source models).'
               },
               packageName: {
                 type: 'string',
@@ -548,20 +554,17 @@ SourceCode format for classes: class declaration with member vars inside { }, me
               properties: {
                 type: 'object',
                 description:
-                  'Additional properties for the object being created. Supported keys by objectType:\n' +
-                  '• class:           extends, implements, isFinal, isAbstract\n' +
-                  '• table:           label, tableGroup, tableType, titleField1, titleField2, fields[]\n' +
-                  '• enum:            label, useEnumValue, configurationKey, isExtensible, enumValues[{name,value?,label?,helpText?}]\n' +
-                  '• enum-extension:  enumValues[{name,label?,value?,countryRegionCodes?}]\n' +
-                  '• table-extension: fields[{name,edt?,enumType?,label?,mandatory?,fieldType?}] — fieldType defaults to AxTableFieldString; use AxTableFieldEnum for enum-based fields (also set enumType)\n' +
-                  '• edt:             label, extends, edtType, stringSize\n' +
-                  '• form:            caption, formTemplate, dataSource\n' +
-                  '• security-privilege: label, targetObject (menu item ObjectName), objectType (MenuItemDisplay|MenuItemAction|MenuItemOutput, default: MenuItemDisplay), accessLevel (view=Read only | maintain=Read+Update+Create+Delete, default: view)\n' +
-                  '• menu-item-*:     label, object, objectType\n' +
-                  'Example enum: properties={"label":"@ContosoExt:Status","enumValues":[{"name":"Open","label":"@ContosoExt:Open"},{"name":"Closed","label":"@ContosoExt:Closed"}]}\n' +
-                  'Example enum-extension: properties={"enumValues":[{"name":"MyValue","label":"@MyModel:MyValue","countryRegionCodes":"CZ"}]}\n' +
-                  'Example table-extension (string EDT field): properties={"fields":[{"name":"ContosoField","edt":"CustAccount","label":"@Contoso:Customer"}]}\n' +
-                  'Example table-extension (enum field): properties={"fields":[{"name":"ContosoStatus","enumType":"NoYes","fieldType":"AxTableFieldEnum","label":"@Contoso:Status"}]}'
+                  'Additional properties by objectType:\n' +
+                  '• class: extends, implements, isFinal, isAbstract\n' +
+                  '• table: label, tableGroup, tableType, titleField1/2, fields[]\n' +
+                  '• enum: label, useEnumValue, configurationKey, isExtensible, enumValues[{name,value?,label?,helpText?}]\n' +
+                  '• enum-extension: enumValues[{name,label?,value?,countryRegionCodes?}]\n' +
+                  '• table-extension: fields[{name,edt?,enumType?,label?,mandatory?,fieldType?}] — enum fields need fieldType:"AxTableFieldEnum" + enumType\n' +
+                  '• edt: label, extends, edtType, stringSize\n' +
+                  '• form: caption, formTemplate, dataSource\n' +
+                  '• security-privilege: label, targetObject, objectType (MenuItemDisplay|Action|Output), accessLevel (view|maintain)\n' +
+                  '• menu-item-*: label, object, objectType\n' +
+                  'Example: properties={"fields":[{"name":"ContosoStatus","enumType":"NoYes","fieldType":"AxTableFieldEnum","label":"@Contoso:Status"}]}'
               },
               addToProject: {
                 type: 'boolean',
@@ -586,18 +589,15 @@ SourceCode format for classes: class declaration with member vars inside { }, me
               overwrite: {
                 type: 'boolean',
                 description:
-                  'Allow overwriting an existing file. Use together with xmlContent when you need to ' +
-                  'completely rewrite an object (e.g. table with corrupted field names, wrong TableType, \u2026). ' +
-                  'Default: false. ' +
-                  '\u274c NEVER use PowerShell/create_file to overwrite D365FO objects \u2014 always use overwrite=true here.',
+                  'Allow overwriting an existing file (use with xmlContent to fully rewrite an object). ' +
+                  'NEVER overwrite D365FO objects via PowerShell/create_file \u2014 always use overwrite=true here.',
                 default: false,
               },
               groundingToken: {
                 type: 'string',
                 description:
-                  'Provenance token returned by prepare_change. Proves the change was grounded in the indexed codebase. ' +
-                  'Required for *-extension objectTypes when GROUNDING_ENFORCE=true on the server. ' +
-                  'The token is object-bound: it only authorizes writes to the object it was issued for.',
+                  'Provenance token from prepare_change/prepare_create. Required for *-extension objectTypes when ' +
+                  'GROUNDING_ENFORCE=true; object-bound — only valid for the object it was issued for.',
               },
             },
             required: ['objectType', 'objectName'],
@@ -678,7 +678,9 @@ SourceCode format for classes: class declaration with member vars inside { }, me
         },
         {
           name: 'modify_d365fo_file',
-          description: '⚠️ WINDOWS ONLY: Safely modifies an existing D365FO XML file (class, table, enum, form, query, view). Supports adding/removing/modifying methods and fields, modifying properties. Validates XML after modification. IMPORTANT: This tool MUST run locally on Windows D365FO VM - it CANNOT work through Azure HTTP proxy (Linux).\n\n⚠️ APPLIES IMMEDIATELY — there is NO dry-run/preview mode. The moment this tool is called it writes the change to disk via IMetadataProvider.Update(). Therefore: BEFORE calling, describe the exact change you intend to make in chat and let the user confirm; only then call this tool to apply it. To revert, use undo_last_modification (git checkout), or pass createBackup=true to also keep a .bak copy. On success the response reports the applied operation. On error the response has isError=true with a message — read it and fix/retry; never treat a ⚠️/❌ response as success.',
+          description: '⚠️ WINDOWS ONLY (no Azure/Linux): Modify an existing D365FO object via IMetadataProvider — methods, fields, indexes, relations, controls, enum values, properties. ' +
+            '⚠️ APPLIES IMMEDIATELY, no dry-run: describe the change in chat and get user confirmation BEFORE calling. ' +
+            'Revert with undo_last_modification (or createBackup=true). isError=true means the change did NOT apply — never treat a ⚠️/❌ response as success.',
           inputSchema: {
             type: 'object',
             properties: {
@@ -707,27 +709,15 @@ SourceCode format for classes: class declaration with member vars inside { }, me
                   'modify-property',
                 ],
                 description:
-                  'Type of modification to perform.\n' +
-                  'add-method: add a new method (or CoC method) to a class/table/form, or update an existing method in place when the same name already exists so its position is preserved.\n' +
-                  'remove-method: remove a method by name.\n' +
-                  'replace-code: surgical in-place replacement — pass oldCode (exact snippet to find) + newCode (replacement text). This is also the preferred way to replace an entire existing method when you already know the old source. ' +
-                  'For form control override methods use methodName="ControlName.methodName" (e.g. "PostButton.clicked").\n' +
-                  'add-field: add a field to a table or table-extension.\n' +
-                  'modify-field: change EDT/mandatory/label of an existing field.\n' +
-                  'rename-field: rename a field (also fixes index DataField refs and TitleField1/2 automatically).\n' +
-                  'replace-all-fields: atomically rewrite ALL fields (use when field names are corrupted).\n' +
-                  'remove-field: remove a field by name.\n' +
-                  'add-display-method: add a display method with [SysClientCacheDataMethodAttribute].\n' +
-                  'add-table-method: generate canonical boilerplate for find/exist/findByRecId/validateWrite/validateDelete/initValue.\n' +
-                  'add-index / remove-index: manage table indexes.\n' +
-                  'add-relation / remove-relation: manage table relations.\n' +
-                  'add-field-group / remove-field-group / add-field-to-field-group: manage field groups.\n' +
+                  'Modification to perform. Non-obvious ones:\n' +
+                  'add-method: adds OR updates in place when the method name exists (position preserved).\n' +
+                  'replace-code: surgical oldCode→newCode replacement; preferred for rewriting a known method. Form control overrides: methodName="ControlName.methodName".\n' +
+                  'rename-field: also fixes index DataField refs and TitleField1/2.\n' +
+                  'replace-all-fields: atomic rewrite of ALL fields (corrupted field names).\n' +
+                  'add-display-method: display method with [SysClientCacheDataMethodAttribute].\n' +
+                  'add-table-method: canonical find/exist/findByRecId/validateWrite/validateDelete/initValue boilerplate.\n' +
                   'add-field-modification: override base-table field label/mandatory in a table-extension.\n' +
-                  'add-data-source: add a data source to a form or form-extension.\n' +
-                  'add-control: add a UI control to a form-extension.\n' +
-                  'add-enum-value / modify-enum-value / remove-enum-value: manage enum values.\n' +
-                  'add-menu-item-to-menu: add a typed menu item entry to a menu or menu-extension.\n' +
-                  'modify-property: change any table/EDT/class-level property (TableGroup, TitleField1, TableType, Extends, …).'
+                  'modify-property: any object-level property (TableGroup, TitleField1, TableType, Extends, …) — see propertyPath.'
               },
               methodName: {
                 type: 'string',
@@ -736,22 +726,14 @@ SourceCode format for classes: class declaration with member vars inside { }, me
               sourceCode: {
                 type: 'string',
                 description:
-                  '[add-method] PREFERRED parameter — pass the FULL X++ method source: ' +
-                  'access modifiers + return type + method name + parameters + body + optional attributes. ' +
-                  'Example: "public void myMethod(str _param)\\n{\\n    next myMethod(_param);\\n}". ' +
-                  'The tool detects that the first real code line contains an access modifier and the method ' +
-                  'name followed by "(" and stores the source as-is without adding an extra signature. ' +
-                  'Alias of methodCode \u2014 use this when passing a complete CoC skeleton or any full method.'
+                  '[add-method] PREFERRED — full X++ method source: modifiers + return type + name + params + body + attributes. ' +
+                  'Example: "public void myMethod(str _param)\\n{\\n    next myMethod(_param);\\n}". Stored as-is. Alias of methodCode.'
               },
               methodCode: {
                 type: 'string',
                 description:
-                  '[add-method] X++ source for the method. Accepts either the FULL method source ' +
-                  '(access modifiers + return type + name + params + body) or just the body. ' +
-                  'When a full source is supplied the signature is preserved as-is. ' +
-                  'When only a body is supplied the signature is assembled from methodModifiers, ' +
-                  'methodReturnType, methodName, and methodParameters. ' +
-                  'Alias: sourceCode (preferred \u2014 pass sourceCode instead for clarity).'
+                  '[add-method] Alias of sourceCode (preferred). Full source is kept as-is; a bare body gets its signature ' +
+                  'assembled from methodModifiers/methodReturnType/methodName/methodParameters.'
               },
               methodModifiers: {
                 type: 'string',
@@ -768,17 +750,13 @@ SourceCode format for classes: class declaration with member vars inside { }, me
               oldCode: {
                 type: 'string',
                 description:
-                  '[replace-code] REQUIRED. Exact existing X++ code snippet to find and replace. ' +
-                  'Must match the source text exactly (leading/trailing whitespace is trimmed). ' +
-                  'If methodName is also provided, the search is scoped to that method only. ' +
-                  'For form control override methods, use methodName="ControlName.methodName" (e.g. "PostButton.clicked").'
+                  '[replace-code] REQUIRED. Exact existing snippet to find (whitespace-trimmed match). ' +
+                  'With methodName the search is scoped to that method.'
               },
               newCode: {
                 type: 'string',
                 description:
-                  '[replace-code] REQUIRED. Replacement X++ code snippet. ' +
-                  'Replaces the first occurrence of oldCode. ' +
-                  'Pass empty string "" to delete the matched oldCode snippet.'
+                  '[replace-code] REQUIRED. Replacement for the first occurrence of oldCode; "" deletes the snippet.'
               },
               fieldName: {
                 type: 'string',
@@ -787,11 +765,8 @@ SourceCode format for classes: class declaration with member vars inside { }, me
               fieldNewName: {
                 type: 'string',
                 description:
-                  'New field name (required for rename-field). ' +
-                  'Also fixes index DataField refs and TitleField1/2 automatically. ' +
-                  'Works even if the field in <Fields> was already renamed (e.g. by replace-all-fields) — ' +
-                  'in that case only the index DataField references are updated (repair-only mode). ' +
-                  'Pass fieldName=old corrupted name, fieldNewName=correct name.'
+                  'New field name (required for rename-field). Index DataField refs and TitleField1/2 are fixed automatically; ' +
+                  'if the field was already renamed, only the index refs are repaired.'
               },
               fieldType: {
                 type: 'string',
@@ -801,11 +776,8 @@ SourceCode format for classes: class declaration with member vars inside { }, me
                 type: 'string',
                 enum: ['String', 'Integer', 'Real', 'Date', 'DateTime', 'Int64', 'GUID', 'Enum'],
                 description:
-                  'Base type for add-field — determines the XML element (AxTableFieldReal, AxTableFieldDate, …). ' +
-                  'REQUIRED when fieldType is an EDT name. Without it defaults to AxTableFieldString (WRONG for Real/Date/Int64!). ' +
-                  'Examples: fieldType="InventQty" + fieldBaseType="Real" → AxTableFieldReal; ' +
-                  'fieldType="TransDate" + fieldBaseType="Date" → AxTableFieldDate; ' +
-                  'fieldType="WHSZoneId" + fieldBaseType="String" → AxTableFieldString.'
+                  'Base type for add-field — REQUIRED when fieldType is an EDT name; selects the XML element ' +
+                  '(e.g. edt "InventQty" + "Real" → AxTableFieldReal). Defaults to String, which is WRONG for Real/Date/Int64.'
               },
               fieldMandatory: {
                 type: 'boolean',
@@ -818,11 +790,8 @@ SourceCode format for classes: class declaration with member vars inside { }, me
               fields: {
                 type: 'array',
                 description:
-                  'Full replacement field list for replace-all-fields operation. ' +
-                  'Each item: { name: string, edt?: string, type?: string, mandatory?: boolean, label?: string }. ' +
-                  'Use when field names are corrupted (contain spaces, wrong casing, wrong EDT). ' +
-                  'All existing fields are replaced atomically. ' +
-                  '❌ NEVER use PowerShell/create_file for this — always use replace-all-fields.',
+                  'Full replacement field list for replace-all-fields (atomic; for corrupted field names). ' +
+                  'NEVER use PowerShell/create_file for this.',
                 items: {
                   type: 'object',
                   properties: {
@@ -832,10 +801,7 @@ SourceCode format for classes: class declaration with member vars inside { }, me
                       type: 'string',
                       enum: ['String', 'Integer', 'Real', 'Date', 'DateTime', 'Int64', 'GUID', 'Enum'],
                       description:
-                        'Base type — REQUIRED alongside edt to get the correct XML element. ' +
-                        'Determines AxTableFieldReal/AxTableFieldDate/… ' +
-                        'Without it defaults to AxTableFieldString (wrong for numeric/date EDTs!). ' +
-                        'Example: { name:"TransQty", edt:"InventQty", type:"Real" }'
+                        'Base type — REQUIRED alongside edt; selects AxTableFieldReal/Date/… (defaults to String, wrong for numeric/date EDTs).'
                     },
                     mandatory: { type: 'boolean' },
                     label: { type: 'string' },
@@ -846,28 +812,12 @@ SourceCode format for classes: class declaration with member vars inside { }, me
               propertyPath: {
                 type: 'string',
                 description:
-                  'Property name to set on the object.\n\n' +
-                  'For **AxTable** (objectType="table"): direct child XML element — ' +
-                  'TableGroup (Group/Parameter/Main/WorksheetHeader/WorksheetLine/Miscellaneous/Framework), ' +
-                  'TitleField1, TitleField2, TableType (TempDB/InMemory/RegularTable), CacheLookup, ' +
-                  'ClusteredIndex, PrimaryIndex, SaveDataPerCompany (Yes/No), Label, HelpText, Extends, SystemTable (Yes/No).\n\n' +
-                  'For **AxTableExtension** (objectType="table-extension"): properties are stored in ' +
-                  '<PropertyModifications>/<AxPropertyModification> — NOT as direct elements. ' +
-                  'Supported names: Label, HelpText, TableGroup, CacheLookup, TitleField1, TitleField2, ' +
-                  'ClusteredIndex, PrimaryIndex, SaveDataPerCompany, TableType, SystemTable, ' +
-                  'ModifiedDateTime (Yes/No), CreatedDateTime (Yes/No), ModifiedBy (Yes/No), CreatedBy (Yes/No), ' +
-                  'CountryRegionCodes (comma-separated ISO codes, e.g. "CZ,SK").\n\n' +
-                  'For **AxEdt** (objectType="edt"): Extends, StringSize, Label, HelpText, ReferenceTable, ReferenceField.\n\n' +
-                  'For **AxClass** (objectType="class"): Extends, Abstract (true/false), Final (true/false), Label.\n\n' +
-                  'Examples: ' +
-                  'propertyPath="Label" propertyValue="@MyModel:MyLabel" | ' +
-                  'propertyPath="HelpText" propertyValue="@MyModel:MyHelpText" | ' +
-                  'propertyPath="TableGroup" propertyValue="Group" | ' +
-                  'propertyPath="TitleField1" propertyValue="ItemId" | ' +
-                  'propertyPath="TableType" propertyValue="TempDB" | ' +
-                  'propertyPath="ModifiedDateTime" propertyValue="Yes" (table-extension) | ' +
-                  'propertyPath="CountryRegionCodes" propertyValue="CZ,SK" (table-extension) | ' +
-                  'propertyPath="Extends" propertyValue="WHSZoneId" (EDT)'
+                  'Property name to set (modify-property). Supported names by objectType:\n' +
+                  'table: TableGroup, TitleField1/2, TableType (TempDB/InMemory/RegularTable), CacheLookup, ClusteredIndex, PrimaryIndex, SaveDataPerCompany, Label, HelpText, Extends, SystemTable.\n' +
+                  'table-extension (stored as <AxPropertyModification>): the table names above plus ModifiedDateTime, CreatedDateTime, ModifiedBy, CreatedBy (Yes/No), CountryRegionCodes ("CZ,SK").\n' +
+                  'edt: Extends, StringSize, Label, HelpText, ReferenceTable, ReferenceField.\n' +
+                  'class: Extends, Abstract, Final, Label.\n' +
+                  'Example: propertyPath="TableGroup" propertyValue="Group".'
               },
               propertyValue: {
                 type: 'string',
@@ -900,10 +850,8 @@ SourceCode format for classes: class declaration with member vars inside { }, me
               controlType: {
                 type: 'string',
                 description:
-                  '[add-control only] Form control type (default: String). ' +
-                  'Values: String, Integer, Real, CheckBox, ComboBox, Date, DateTime, Int64, Group, Button, CommandButton, MenuFunctionButton. ' +
-                  'Use CheckBox for NoYes/boolean. Use ComboBox for enum fields. ' +
-                  'When omitted defaults to String (correct for most EDT-bound fields).'
+                  '[add-control only] Control type: String (default), Integer, Real, CheckBox (NoYes/boolean), ComboBox (enums), ' +
+                  'Date, DateTime, Int64, Group, Button, CommandButton, MenuFunctionButton.'
               },
               positionType: {
                 type: 'string',
@@ -933,9 +881,8 @@ SourceCode format for classes: class declaration with member vars inside { }, me
               groundingToken: {
                 type: 'string',
                 description:
-                  'Provenance token returned by prepare_change. Proves the change was grounded in the indexed codebase. ' +
-                  'Required for *-extension objectTypes when GROUNDING_ENFORCE=true on the server. ' +
-                  'The token is object-bound: it only authorizes writes to the object it was issued for.',
+                  'Provenance token from prepare_change/prepare_create. Required for *-extension objectTypes when ' +
+                  'GROUNDING_ENFORCE=true; object-bound — only valid for the object it was issued for.',
               },
             },
             required: ['objectType', 'objectName', 'operation'],
@@ -990,10 +937,8 @@ SourceCode format for classes: class declaration with member vars inside { }, me
               filePath: {
                 type: 'string',
                 description:
-                  'Absolute path to the form XML file. Use this when get_form_info returned a ' +
-                  '"could not be read from disk" warning \u2014 the warning includes the exact path to pass here. ' +
-                  'Bypasses the DB path lookup entirely. ' +
-                  'Example: "K:\\\\AOSService\\\\PackagesLocalDirectory\\\\ContosoCore\\\\ContosoCore\\\\AxForm\\\\MyForm.xml"',
+                  'Absolute path to the form XML \u2014 pass the exact path from a "could not be read from disk" warning; ' +
+                  'bypasses the DB path lookup.',
               },
               searchControl: {
                 type: 'string',
@@ -1429,27 +1374,15 @@ SourceCode format for classes: class declaration with member vars inside { }, me
               tableGroup: {
                 type: 'string',
                 description:
-                  'Table group (business role). Defined by the system enum TableGroup (source: MSDN). ' +
-                  'Valid values: ' +
-                  '"Miscellaneous" = DEFAULT for new tables (e.g. TableExpImpDef); ' +
-                  '"Main" = master table for a central business object (e.g. CustTable, VendTable); ' +
-                  '"Transaction" = transaction data, not edited directly (e.g. CustTrans, VendTrans); ' +
-                  '"Parameter" = setup data for a Main table, one record/company (e.g. CustParameters); ' +
-                  '"Group" = categorisation for a Main table, one-to-many with Main (e.g. CustGroup); ' +
-                  '"WorksheetHeader" = worksheet header, one-to-many with WorksheetLine (e.g. SalesTable); ' +
-                  '"WorksheetLine" = lines to validate → transactions, may be deleted safely (e.g. SalesLine); ' +
-                  '"Reference" = shared reference/lookup data; ' +
-                  '"Framework" = internal Microsoft framework tables. ' +
-                  '⛔ NEVER pass "TempDB" or "InMemory" here — use tableType instead.',
+                  'Business role (TableGroup enum): Main (master, CustTable), Transaction (CustTrans), Parameter (CustParameters), ' +
+                  'Group (CustGroup), WorksheetHeader/WorksheetLine (SalesTable/SalesLine), Reference, Miscellaneous, Framework. ' +
+                  '⛔ NEVER pass "TempDB"/"InMemory" here — that is tableType.',
               },
               tableType: {
                 type: 'string',
                 description:
-                  'Table storage type (TableType property, source: MSDN). Valid values: ' +
-                  '"Regular"/"RegularTable" = DEFAULT, permanent — omit for regular tables; ' +
-                  '"TempDB" = temporary table in SQL TempDB, dropped after use, joins are EFFICIENT; ' +
-                  '"InMemory" = temporary ISAM file on AOS tier, joins are INEFFICIENT (= old AX2009 Temporary). ' +
-                  '⛔ NEVER pass this value as tableGroup.',
+                  'Storage type: Regular (default, omit), TempDB (SQL temp, efficient joins), ' +
+                  'InMemory (AOS-tier ISAM, inefficient joins). ⛔ NEVER pass as tableGroup.',
               },
               copyFrom: {
                 type: 'string',
@@ -1515,9 +1448,8 @@ SourceCode format for classes: class declaration with member vars inside { }, me
               },
               cloneFrom: {
                 type: 'string',
-                description: 'PREFERRED: clone the complete XML of an existing form (controls, patterns, sub-patterns), ' +
-                  're-bound via tableMapping. Use a Microsoft reference form for the chosen pattern ' +
-                  '(e.g. CustGroup for SimpleList, PaymTerm for SimpleListDetails, CustParameters for TableOfContents). ' +
+                description: 'PREFERRED: clone a reference form\'s full XML (controls + patterns), re-bound via tableMapping ' +
+                  '(e.g. CustGroup→SimpleList, PaymTerm→SimpleListDetails, CustParameters→TableOfContents). ' +
                   'Methods except classDeclaration are stripped; fields missing on target tables are dropped and reported.',
               },
               tableMapping: {
@@ -1888,12 +1820,10 @@ SourceCode format for classes: class declaration with member vars inside { }, me
       {
         name: 'build_d365fo_project',
         description:
-          'Builds a D365FO model using the X++ compiler (xppc.exe). ' +
-          'Compiles the ENTIRE MODEL — not just one project file. ' +
-          'By default the tool BLOCKS until the build finishes and returns the final result, so call it ONCE per requested build (do NOT poll). ' +
-          'Set wait:false for legacy fire-and-forget mode where the tool returns immediately and the caller polls with follow-up calls. ' +
-          'Use fullBuild:true when xppc reports "model element has not been successfully compiled since it was last changed" (stale symbol error). ' +
-          'Use buildReferencedModels:true to also build custom/ISV dependencies first (reads <ModuleReferences> from the model descriptor; skips Microsoft standard models; topological order).',
+          'Build a D365FO model with xppc.exe (compiles the ENTIRE model, not one project). ' +
+          'Blocks until done — call ONCE per build, do NOT poll (wait:false = legacy polling mode). ' +
+          'fullBuild:true fixes "not been successfully compiled since it was last changed" stale-symbol errors; ' +
+          'buildReferencedModels:true builds custom/ISV dependencies first.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -1986,7 +1916,9 @@ SourceCode format for classes: class declaration with member vars inside { }, me
       // ── Code Review & Source Control ─────────────────────────────────────────
       {
         name: 'review_workspace_changes',
-        description: 'Analyze uncommitted X++ changes in a local git repository (git diff HEAD) and perform an AI-based D365FO code review. Checks for BP violations, missing labels, CoC patterns, and other best practices.\n\n⚠️ Local companion tool: available only in write-only/local mode (Windows VM).\n\n⚠️ This tool is for CODE REVIEW ONLY — NOT for verifying that a modify_d365fo_file or create_d365fo_file call succeeded. For post-edit verification use verify_d365fo_project (disk + .rnrproj) and get_class_info / get_method_source after update_symbol_index.\n\n⚠️ The diff output may be large. If it appears truncated, do NOT use built-in file-reading tools (read_file, grep_search, get_file) to supplement it — those tools are forbidden on .xml/.xpp files. Instead, accept the visible portion and proceed or ask the user to narrow the scope.',
+        description: 'Code review of uncommitted X++ changes (git diff HEAD): BP violations, missing labels, CoC patterns. ' +
+          'Windows/local mode only. NOT for verifying writes (use verify_d365fo_project + get_class_info instead). ' +
+          'If the diff looks truncated, do NOT read .xml/.xpp via built-in tools — proceed with the visible portion or narrow the scope.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -2009,12 +1941,9 @@ SourceCode format for classes: class declaration with member vars inside { }, me
       {
         name: 'get_d365fo_error_help',
         description:
-          'Diagnose D365FO / X++ compiler and runtime errors. ' +
-          'Provide an error message or error code and receive a structured explanation, ' +
-          'root-cause analysis, step-by-step fix instructions, and an X++ code example. ' +
-          'Covers: TTS level mismatch, UpdateConflict (OCC), CSUV1 illegal assignment, ' +
-          'SYS10028 missing next call, overlayering not allowed, BPUpgradeCodeToday (today() deprecated), ' +
-          'forupdate missing, record not found, number sequence not configured, and more.',
+          'Diagnose D365FO / X++ compiler and runtime errors: structured root cause + step-by-step fix + corrected X++ example. ' +
+          'Covers TTS mismatch, UpdateConflict, CSUV1, SYS10028 missing next, overlayering, BP errors, and more. ' +
+          'Call this instead of guessing — X++ error semantics differ from C#/.NET.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -2033,11 +1962,9 @@ SourceCode format for classes: class declaration with member vars inside { }, me
       {
         name: 'get_xpp_knowledge',
         description:
-          'Queryable knowledge base of D365FO X++ patterns, best practices, and AX2012→D365FO migration guidance. ' +
-          'Returns distilled, verified patterns with code examples. Use BEFORE generating code to avoid deprecated ' +
-          'APIs and AX2012 anti-patterns. Topics: batch jobs, transactions, queries, CoC/extensions, security, ' +
-          'data entities, temp tables, number sequences, form patterns, set-based operations, error handling, ' +
-          'SysOperation framework, and more.',
+          'Queryable X++ rulebook: verified patterns, BP rules, AX2012→D365FO migration. Use BEFORE generating code. ' +
+          'Topics incl.: select-statement, coc-authoring, bp-rules, sysoperation, event-handlers, workflow, ' +
+          'number-sequences, security, sysda, form patterns.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -2061,17 +1988,9 @@ SourceCode format for classes: class declaration with member vars inside { }, me
       {
         name: 'validate_xpp',
         description:
-          'Offline X++ / XML best-practice validator (<50 ms, all-platform, no xppbp.exe needed). ' +
-          'Returns structured violations {rule, severity, line, excerpt, fix}. ' +
-          'Call AFTER generating code and BEFORE write operations to catch BP issues in the same turn. ' +
-          'Rules: today() deprecated (SEL001), forceLiterals banned (SEL002), crossCompany placement (SEL003), ' +
-          'nested while-select (SEL004), function in where clause (SEL005), ' +
-          '[ExtensionOf] class not final (COC002), class not ending _Extension (COC003), ' +
-          'CoC default param values (COC001), hardcoded strings in info/warning/error (BP001), ' +
-          'doInsert/doUpdate/doDelete misuse (BP002), generic doc-comments (BP003), ' +
-          'missing AlternateKey on table XML (XML001). ' +
-          'Plus data-driven property rules mined from standard models (XML002 Label, ' +
-          'XML003 TableGroup, XML004 field EDT, XML005 ClusteredIndex).',
+          'Offline X++/XML best-practice validator (<50 ms, no xppbp.exe). Returns structured violations {rule, severity, line, excerpt, fix}. ' +
+          'Call AFTER generating code, BEFORE writes. Covers select rules (SEL001-005), CoC rules (COC001-003), ' +
+          'BP rules (BP001-003), and table-XML property rules (XML001-005) mined from standard models.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -2096,15 +2015,10 @@ SourceCode format for classes: class declaration with member vars inside { }, me
       {
         name: 'validate_form_pattern',
         description:
-          'Structural validator for D365FO form patterns (<50 ms, offline). ' +
-          'Checks AxForm XML against the form-pattern catalog: required containers and their order ' +
-          '(e.g. ActionPane → Filters → Grid for SimpleList), allowed child control types, ' +
-          'sub-pattern usage on containers (FieldsFieldGroups, CustomAndQuickFilters, ToolbarAndList, …), ' +
-          'Pattern/PatternVersion validity, and datasource expectations ' +
-          '(e.g. DetailsTransaction needs header+lines datasources). ' +
-          'Returns structured violations {rule, severity, path, excerpt, fix}; rules FP001-FP010. ' +
-          'Structural errors block form writes in create_d365fo_file when FORM_PATTERN_ENFORCE=true (default). ' +
-          'Call AFTER generate_smart_form or manual form XML edits and BEFORE create_d365fo_file.',
+          'Structural form-pattern validator (<50 ms, offline): container hierarchy/order, allowed child types, ' +
+          'sub-patterns, PatternVersion, datasource expectations. Returns violations {rule, severity, path, excerpt, fix} (FP001-FP010). ' +
+          'Structural errors BLOCK form writes when FORM_PATTERN_ENFORCE=true (default). ' +
+          'Call after generate_smart_form / manual form XML edits, before create_d365fo_file.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -2126,12 +2040,9 @@ SourceCode format for classes: class declaration with member vars inside { }, me
       {
         name: 'get_form_pattern_spec',
         description:
-          'Full specification of a D365FO form pattern or container sub-pattern: required control hierarchy ' +
-          'with ordering, allowed child types, applicable sub-patterns per container, known PatternVersions, ' +
-          'when to use / when not to use, Microsoft reference forms to clone, and lifecycle method guidance. ' +
-          'Call BEFORE building a form (after get_form_patterns recommend mode) to know the target structure ' +
-          'and pick a cloneFrom reference form. Accepts ids, xmlNames and aliases ' +
-          '(SimpleList, DetailsMaster, Dialog, FieldsFieldGroups, "master", "transaction", …).',
+          'Full spec of a form pattern or container sub-pattern: required hierarchy + ordering, allowed children, ' +
+          'sub-patterns, PatternVersions, when (not) to use, reference forms to clone, lifecycle methods. ' +
+          'Call after get_form_patterns(recommend) and before building a form. Accepts ids, xmlNames and aliases.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -2146,13 +2057,10 @@ SourceCode format for classes: class declaration with member vars inside { }, me
       {
         name: 'resolve_references',
         description:
-          'Semantic reference resolver (<200 ms, index-only) — verifies that every type, ' +
-          'table field, method (incl. arity), enum, label and intrinsic target (tableStr, ' +
-          'fieldStr, classStr, …) in generated X++ code EXISTS in the indexed codebase. ' +
-          'Catches hallucinated symbols BEFORE the compiler does. ' +
-          'Call AFTER generating code and BEFORE create_d365fo_file / modify_d365fo_file. ' +
-          'Returns structured violations {kind, severity, line, identifier, detail} — fix errors in the same turn. ' +
-          'When GROUNDING_ENFORCE=true, write tools run this check internally and reject code with errors.',
+          'Semantic reference resolver (<200 ms, index-only): verifies every type, field, method (incl. arity), enum, ' +
+          'label and intrinsic (tableStr/fieldStr/…) in generated X++ EXISTS in the indexed codebase — catches hallucinated ' +
+          'symbols before the compiler. Call after generating, before writes; fix errors in the same turn. ' +
+          'Write tools run this internally when GROUNDING_ENFORCE=true.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -2171,12 +2079,9 @@ SourceCode format for classes: class declaration with member vars inside { }, me
       {
         name: 'prepare_change',
         description:
-          'Single-round context aggregator for D365FO extension work. ' +
-          'Returns in ONE call: exact method signature, existing CoC wrappers, CoC eligibility, ' +
-          'recommended extension strategy, naming validation, and code patterns from the index. ' +
-          'Replaces the 4-step analyze→search→info→generate workflow with a single parallel call. ' +
-          'Returns a grounding token (30-min TTL) that proves the AI used real codebase data. ' +
-          'When GROUNDING_ENFORCE=true the token is required for extension generate_code and create_d365fo_file calls.',
+          'ONE-call context aggregator for extension work: exact signature, existing CoC wrappers, eligibility, ' +
+          'recommended strategy, naming validation, code patterns + groundingToken (30-min TTL, required for ' +
+          'extension writes when GROUNDING_ENFORCE=true). Replaces the analyze→search→info→generate loop.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -2208,11 +2113,8 @@ SourceCode format for classes: class declaration with member vars inside { }, me
       {
         name: 'prepare_create',
         description:
-          'Single-round context aggregator for creating NEW D365FO objects (mirror of prepare_change). ' +
-          'Returns in ONE call: name collision check, naming validation with the auto-applied prefix, ' +
-          'similar existing objects to copy patterns from, EDT suggestions for planned fields, ' +
-          'reusable labels, mined property defaults (standard-model statistics), and a grounding token. ' +
-          'Replaces the search → validate_object_naming → suggest_edt → search_labels sequence with one call. ' +
+          'ONE-call context aggregator for NEW objects (mirror of prepare_change): collision check, naming with auto-prefix, ' +
+          'similar objects, EDT suggestions, reusable labels, mined property defaults + groundingToken. ' +
           'Call BEFORE generating any new object.',
         inputSchema: {
           type: 'object',

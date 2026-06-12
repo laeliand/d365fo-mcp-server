@@ -43,21 +43,8 @@ export const validateXppArgsSchema = z.object({
   ),
 });
 
-export const validateXppToolDefinition = {
-  name: 'validate_xpp',
-  description:
-    'Offline X++ / XML best-practice validator (<50 ms, all-platform). ' +
-    'Checks generated code against D365FO rules without xppbp.exe or a Windows VM. ' +
-    'Returns structured violations with {rule, severity, line, excerpt, fix}. ' +
-    'Call AFTER generating code and BEFORE write operations to catch BP issues in the same turn. ' +
-    'Rules: today() deprecated, forceLiterals banned, crossCompany placement, ' +
-    'nested while-select, function in where, CoC/ExtensionOf correctness, ' +
-    'hardcoded strings, doInsert/doUpdate/doDelete misuse, generic doc-comments, ' +
-    'missing AlternateKey on table XML. ' +
-    'Plus data-driven property rules (XML002-XML005: Label, TableGroup, field EDT, ClusteredIndex) ' +
-    'with thresholds mined from your standard models during build-database.',
-  inputSchema: validateXppArgsSchema,
-};
+// Tool registration (name, description, inputSchema) lives inline in
+// src/server/mcpServer.ts - the single source of truth for tool instructions.
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
