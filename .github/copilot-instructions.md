@@ -37,7 +37,7 @@ PowerShell / any terminal command **WILL HANG** in VS 2022 / VS 2026 MCP integra
 | Method signature for CoC | `get_method_signature` (already returned by `prepare_change`) |
 | Validate X++ before write | `validate_xpp(code)` — offline BP check, <50 ms |
 | X++ rules & patterns | `get_xpp_knowledge(topic)` — select grammar, CoC, BP rules, SysOperation, workflow, … |
-| Create a NEW form | `get_form_patterns(recommend={...})` → `get_form_pattern_spec(pattern)` → `generate_smart_form(cloneFrom=referenceForm, tableMapping={...})` → `validate_form_pattern(xml)` |
+| Create a NEW form | `get_form_patterns(recommend={...})` → `get_form_pattern_spec(pattern)` → `generate_smart(objectType="form", cloneFrom=referenceForm, tableMapping={...})` → `validate_form_pattern(xml)` |
 | Validate form XML against its pattern | `validate_form_pattern(xml \| formName \| filePath)` — structural errors block form writes (FORM_PATTERN_ENFORCE) |
 | Resolve label / EDT / class refs | `resolve_references(code)` |
 | Build / BP / Sync | `build_d365fo_project` / `run_bp_check` / `trigger_db_sync` |
@@ -63,7 +63,7 @@ PowerShell / any terminal command **WILL HANG** in VS 2022 / VS 2026 MCP integra
 5. Never copy default parameter values into CoC wrapper signatures.
 6. Never use `today()` — use `DateTimeUtil::getToday(DateTimeUtil::getUserPreferredTimeZone())`.
 7. Never use hardcoded strings in `Info()` / `warning()` / `error()` — use `@Model:Label` references.
-8. Call `search_labels()` before `create_label()` — reuse existing labels.
+8. Call `labels(action="search")` before `labels(action="create")` — reuse existing labels.
 
 ### Extension naming
 

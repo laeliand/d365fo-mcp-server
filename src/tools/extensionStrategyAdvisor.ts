@@ -278,7 +278,7 @@ const STRATEGY_RULES: readonly StrategyRule[] = [
     nextSteps: [
       'get_object_info(objectType="report", name="ReportName") — inspect existing report structure',
       'get_xpp_knowledge("ssrs-reports") — patterns for SSRS',
-      'generate_smart_report(name="MyReport") — generate full SSRS stack',
+      'generate_smart(objectType="report", name="MyReport") — generate full SSRS stack',
     ],
     antiPatterns: [
       { wrong: 'Business Event for document delivery', why: 'Business Events send notifications, not formatted documents' },

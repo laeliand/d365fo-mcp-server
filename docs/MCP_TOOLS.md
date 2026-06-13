@@ -1,10 +1,10 @@
-# Tool Reference — 52 Tools
+# Tool Reference — 47 Tools
 
 Every tool the server exposes, grouped by purpose. The AI agent picks tools automatically — the *example prompts* show what to ask to trigger them; you never name tools yourself.
 
 > **C# bridge first:** on Windows D365FO VMs, 16 read tools query the live `IMetadataProvider` (always-fresh metadata) and `DYNAMICSXREFDB` (compiler-resolved cross-references), falling back to SQLite transparently on Azure/Linux. All write operations go exclusively through the bridge. See [BRIDGE.md](BRIDGE.md) and [SQLITE_DEPENDENCY.md](SQLITE_DEPENDENCY.md).
 >
-> **Server modes:** `full` = all 52 tools · `read-only` (Azure) = search/analysis only · `write-only` (hybrid companion) = file operations + bridge-backed reads. See [MCP_CONFIG.md](MCP_CONFIG.md).
+> **Server modes:** `full` = all 47 tools · `read-only` (Azure) = search/analysis only · `write-only` (hybrid companion) = file operations + bridge-backed reads. See [MCP_CONFIG.md](MCP_CONFIG.md).
 
 ---
 
@@ -26,7 +26,7 @@ flowchart LR
     end
     subgraph Forms["New forms"]
         C1["get_form_patterns<br/>(recommend)"] --> C2[get_form_pattern_spec]
-        C2 --> C3["generate_smart_form<br/>(cloneFrom)"]
+        C2 --> C3["generate_smart<br/>(objectType=form, cloneFrom)"]
         C3 --> C4[validate_form_pattern]
         C4 --> C5[create_d365fo_file]
     end
@@ -36,7 +36,7 @@ flowchart LR
 |----------|-------|------|
 | CoC / event handler / extension | `prepare_change` → generate → `resolve_references` + `validate_xpp` → `modify_d365fo_file` | grounding token + reference proof |
 | New class / table / enum | `prepare_create` → generate → `resolve_references` + `validate_xpp` → `create_d365fo_file` | grounding token + collision check |
-| New form | `get_form_patterns(recommend)` → `get_form_pattern_spec` → `generate_smart_form(cloneFrom)` → `validate_form_pattern` → `create_d365fo_file` | structural pattern gate (FP001–FP010) |
+| New form | `get_form_patterns(recommend)` → `get_form_pattern_spec` → `generate_smart(objectType="form", cloneFrom)` → `validate_form_pattern` → `create_d365fo_file` | structural pattern gate (FP001–FP010) |
 
 ---
 
@@ -63,14 +63,13 @@ One unified reader covers every object type via `objectType`; type-specific flag
 | `get_method_source` † | Full X++ source of a method | *"Show me the body of CustTable.validateWrite"* |
 | `find_references` † | Where-used analysis, xref-enriched (reference type, caller class/method) | *"Where is updateInventory called from?"* |
 
-## 🏷️ Label Management (4)
+## 🏷️ Label Management (1)
+
+One unified tool covers all label operations via `action` (mirrors the `get_object_info` pattern).
 
 | Tool | What it does | Example prompt |
 |------|--------------|----------------|
-| `search_labels` | Full-text search across 20M+ label rows, all languages | *"Is there a label for 'payment terms'?"* |
-| `get_label_info` | All translations of a label ID | *"Show translations of @SYS12345"* |
-| `create_label` | Add a label to all language files of a model | *"Create label 'Priority tier' in en-US, cs, de"* |
-| `rename_label` | Rename a label ID across .label.txt, X++ and XML | *"Rename label MyOldId to MyNewId everywhere"* |
+| `labels` | `action=search` — full-text query across 20M+ label rows, all languages · `action=info` — all translations of a labelId (or list label files when omitted) · `action=create` — add a label to all language files of a model · `action=rename` — rename a label ID across .label.txt, X++ and XML | *"Is there a label for 'payment terms'?"* · *"Show translations of @SYS12345"* · *"Create label 'Priority tier' in en-US, cs, de"* · *"Rename label MyOldId to MyNewId everywhere"* |
 
 ## 🧠 Code Intelligence (6)
 
@@ -83,13 +82,13 @@ One unified reader covers every object type via `objectType`; type-specific flag
 | `analyze_class_completeness` | Missing standard methods on a class | *"What standard methods is my service class missing?"* |
 | `get_api_usage_patterns` † | How an API is initialized and called (compiler-resolved callers) | *"How is LedgerJournalCheckPost typically used?"* |
 
-## 🎨 Smart Object Generation (4)
+## 🎨 Smart Object Generation (2)
+
+One unified pattern-aware generator covers tables, forms and reports via `objectType`.
 
 | Tool | What it does | Example prompt |
 |------|--------------|----------------|
-| `generate_smart_table` | Pattern-aware table XML with EDT suggestions | *"Create an audit log table with SalesId, PostedAt, PostedBy"* |
-| `generate_smart_form` | Pattern-aware form generation — **clones reference forms** (`cloneFrom` + `tableMapping`, patterns and sub-patterns preserved), template fallback, optional lifecycle method stubs (`includeMethodStubs`) | *"Create a SimpleList form for MyRentalGroup by cloning CustGroup"* |
-| `generate_smart_report` | Complete SSRS stack in one call: TmpTable + Contract + DP + Controller + AxReport/RDL | *"Create report InventByZones with these 7 fields"* |
+| `generate_smart` | `objectType=table` — pattern-aware table XML with EDT suggestions · `objectType=form` — **clones reference forms** (`cloneFrom` + `tableMapping`, patterns and sub-patterns preserved), template fallback, optional lifecycle method stubs (`includeMethodStubs`) · `objectType=report` — complete SSRS stack in one call: TmpTable + Contract + DP + Controller + AxReport/RDL | *"Create an audit log table with SalesId, PostedAt, PostedBy"* · *"Create a SimpleList form for MyRentalGroup by cloning CustGroup"* · *"Create report InventByZones with these 7 fields"* |
 | `suggest_edt` | EDT suggestions for a field name (fuzzy, confidence-ranked) | *"Which EDT for a field CustomerAccount?"* |
 
 ## 🧩 Form Patterns (3)

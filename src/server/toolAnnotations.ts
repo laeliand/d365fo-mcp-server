@@ -54,13 +54,11 @@ export const TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
   find_references:                  read('Find references'),
   find_coc_extensions:              read('Find CoC extensions'),
   find_event_handlers:              read('Find event handlers'),
-  search_labels:                    read('Search labels'),
 
   // ── Object inspection ─────────────────────────────────────────────────────
   get_object_info:                  read('Read object info'),
   get_method_signature:             read('Read method signature'),
   get_method_source:                read('Read method source'),
-  get_label_info:                   read('Read label info'),
   get_table_extension_info:         read('Read table extensions'),
   get_security_artifact_info:       read('Read security artifact'),
   get_security_coverage_for_object: read('Read security coverage'),
@@ -99,14 +97,14 @@ export const TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
   // ── File & label writes ───────────────────────────────────────────────────
   create_d365fo_file:               write('Create D365FO object file'),
   modify_d365fo_file:               write('Modify D365FO object file', { destructive: true }),
-  create_label:                     write('Create label'),
-  rename_label:                     write('Rename label', { destructive: true }),
+  // `labels` exposes read actions (search/info) and write actions (create/rename).
+  // Marked as a write tool so clients prompt for confirmation; the read actions
+  // are still safe to call — the tool annotations are hints, not gates.
+  labels:                           write('Label operations', { destructive: true }),
   undo_last_modification:           write('Undo last modification', { destructive: true }),
-  // generate_smart_* write the generated XML to PackagesLocalDirectory
-  // (bridge or SmartXmlBuilder→fs fallback); they refuse to overwrite.
-  generate_smart_table:             write('Generate smart table'),
-  generate_smart_form:              write('Generate smart form'),
-  generate_smart_report:            write('Generate smart report'),
+  // generate_smart writes the generated XML to PackagesLocalDirectory
+  // (bridge or SmartXmlBuilder→fs fallback); it refuses to overwrite.
+  generate_smart:                   write('Generate smart object'),
 
   // ── SDLC operations ───────────────────────────────────────────────────────
   update_symbol_index:              write('Update symbol index', { idempotent: true }),

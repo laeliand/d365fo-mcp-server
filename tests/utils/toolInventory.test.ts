@@ -30,8 +30,8 @@ describe('tool inventory contract', () => {
   });
 
   it('exposes the expected total tool count', () => {
-    expect(mcpServerToolNames).toHaveLength(52);
-    expect(startupCatalogToolNames).toHaveLength(52);
+    expect(mcpServerToolNames).toHaveLength(47);
+    expect(startupCatalogToolNames).toHaveLength(47);
   });
 
   it('keeps local-only tool set aligned with the published tool inventory', () => {
@@ -40,8 +40,8 @@ describe('tool inventory contract', () => {
       expect(publishedTools.has(toolName)).toBe(true);
     }
 
-    expect(LOCAL_TOOLS.size).toBe(15);
-    expect(mcpServerToolNames.filter(name => !LOCAL_TOOLS.has(name))).toHaveLength(37);
+    expect(LOCAL_TOOLS.size).toBe(13);
+    expect(mcpServerToolNames.filter(name => !LOCAL_TOOLS.has(name))).toHaveLength(34);
   });
 
   it('has a tool annotation (title + hints) for every published tool', () => {
@@ -62,9 +62,9 @@ describe('tool inventory contract', () => {
 
   it('marks write tools as non-read-only in annotations', () => {
     const writeTools = [
-      'create_d365fo_file', 'modify_d365fo_file', 'create_label', 'rename_label',
-      'undo_last_modification', 'generate_smart_table', 'generate_smart_form',
-      'generate_smart_report', 'update_symbol_index', 'build_d365fo_project',
+      'create_d365fo_file', 'modify_d365fo_file', 'labels',
+      'undo_last_modification', 'generate_smart',
+      'update_symbol_index', 'build_d365fo_project',
       'trigger_db_sync', 'run_systest_class',
     ];
     for (const toolName of writeTools) {

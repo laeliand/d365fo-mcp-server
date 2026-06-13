@@ -20,15 +20,10 @@ import { findReferencesTool } from './findReferences.js';
 import { modifyD365FileTool } from './modifyD365File.js';
 import { getMethodSignatureTool } from './methodSignature.js';
 import { getMethodSourceTool } from './getMethodSource.js';
-import { searchLabelsTool } from './searchLabels.js';
-import { getLabelInfoTool } from './getLabelInfo.js';
-import { createLabelTool } from './createLabel.js';
-import { renameLabelTool } from './renameLabel.js';
+import { labelsTool } from './labels.js';
 import { handleGetTablePatterns } from './getTablePatterns.js';
 import { handleGetFormPatterns } from './getFormPatterns.js';
-import { handleGenerateSmartTable } from './generateSmartTable.js';
-import { handleGenerateSmartForm } from './generateSmartForm.js';
-import { handleGenerateSmartReport } from './generateSmartReport.js';
+import { generateSmartTool } from './generateSmart.js';
 import { handleSuggestEdt } from './suggestEdt.js';
 import { securityArtifactInfoTool } from './securityArtifactInfo.js';
 import { findCocExtensionsTool } from './findCocExtensions.js';
@@ -116,9 +111,7 @@ function extractWorkspaceFromMeta(meta: any): string | null {
 /** Per-tool response cap sizes. 'uncapped' = no truncation. */
 const TOOL_CAP_SIZES: Record<string, number | 'uncapped'> = {
   // Uncapped — XML generation, file writes, or long structured output
-  generate_smart_table:             'uncapped',
-  generate_smart_form:              'uncapped',
-  generate_smart_report:            'uncapped',
+  generate_smart:                   'uncapped',
   create_d365fo_file:               'uncapped',
   generate_d365fo_xml:              'uncapped',
   // get_object_info can return reports (RDL) and full class bodies — never truncate
@@ -302,14 +295,8 @@ export function registerToolHandler(server: Server, context: XppServerContext): 
         return getMethodSignatureTool(request, context);
       case 'get_method_source':
         return getMethodSourceTool(request, context);
-      case 'search_labels':
-        return searchLabelsTool(request, context);
-      case 'get_label_info':
-        return getLabelInfoTool(request, context);
-      case 'create_label':
-        return createLabelTool(request, context);
-      case 'rename_label':
-        return renameLabelTool(request, context);
+      case 'labels':
+        return labelsTool(request, context);
       case 'get_table_patterns': {
         const r = await handleGetTablePatterns(
           request.params.arguments as any,
@@ -324,28 +311,8 @@ export function registerToolHandler(server: Server, context: XppServerContext): 
         );
         return { content: r?.content ?? [{ type: 'text', text: 'No results returned' }] };
       }
-      case 'generate_smart_table': {
-        const r = await handleGenerateSmartTable(
-          request.params.arguments as any,
-          context.symbolIndex,
-          context.bridge,
-        );
-        return { content: r?.content ?? [{ type: 'text', text: 'No results returned' }] };
-      }
-      case 'generate_smart_form': {
-        const r = await handleGenerateSmartForm(
-          request.params.arguments as any,
-          context.symbolIndex
-        );
-        return { content: r?.content ?? [{ type: 'text', text: 'No results returned' }] };
-      }
-      case 'generate_smart_report': {
-        const r = await handleGenerateSmartReport(
-          request.params.arguments as any,
-          context.symbolIndex
-        );
-        return { content: r?.content ?? [{ type: 'text', text: 'No results returned' }] };
-      }
+      case 'generate_smart':
+        return generateSmartTool(request, context);
       case 'suggest_edt': {
         const r = await handleSuggestEdt(
           request.params.arguments as any,

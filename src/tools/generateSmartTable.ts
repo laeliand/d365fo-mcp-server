@@ -202,9 +202,10 @@ export async function handleGenerateSmartTable(
           `  Reference       — shared reference/lookup data across modules`,
           `  Framework       — internal Microsoft framework/infrastructure tables`,
           ``,
-          `🔄 **Call generate_smart_table again** with the corrected parameters:`,
+          `🔄 **Call generate_smart again** with the corrected parameters:`,
           `\`\`\``,
-          `generate_smart_table(`,
+          `generate_smart(`,
+          `  objectType="table",`,
           `  name="${name}",`,
           `  tableType="${tableGroup}",       ← move here`,
           `  tableGroup="Main",               ← use a valid TableGroup value`,
@@ -636,10 +637,11 @@ export async function handleGenerateSmartTable(
           `The user described specific fields but you did NOT pass \`fieldsHint\`. Without it the table`,
           `will be empty (no fields, no indexes, no methods). No XML has been generated.`,
           ``,
-          `🔄 **YOU MUST call \`generate_smart_table\` AGAIN** with ALL fields extracted from the user's description:`,
+          `🔄 **YOU MUST call \`generate_smart\` AGAIN** with ALL fields extracted from the user's description:`,
           ``,
           `\`\`\``,
-          `generate_smart_table(`,
+          `generate_smart(`,
+          `  objectType="table",`,
           `  name="${name}",                           ← base name WITHOUT model prefix`,
           `  fieldsHint="Field1, Field2, Field3",      ← REQUIRED: extract ALL fields from the user`,
           `  primaryKeyFields=["Field1", "Field2"],    ← ALL PK fields (omit for single-field PK)`,
@@ -697,7 +699,7 @@ export async function handleGenerateSmartTable(
       `)`,
       `\`\`\``,
       `⛔ NEVER use \`create_file\`, PowerShell scripts, or any built-in file tool — they corrupt D365FO metadata and break VS project integration.`,
-      `⛔ NEVER call \`modify_d365fo_file\` to add methods — the \`methods\` parameter in \`generate_smart_table\` already embedded them in the XML above.`,
+      `⛔ NEVER call \`modify_d365fo_file\` to add methods — the \`methods\` parameter in \`generate_smart\` already embedded them in the XML above.`,
       `⛔ NEVER call \`suggest_method_implementation\` or \`get_api_usage_patterns\` between this step and \`create_d365fo_file\` — those tools are expensive and their result is not needed for file creation. Call them AFTER the file is created if the user explicitly asks.`,
     ].join('\n');
     const edtWarningBlock = edtWarnings.length > 0
@@ -734,7 +736,7 @@ export async function handleGenerateSmartTable(
     if (fs.existsSync(bridgeTargetPath)) {
       throw new Error(
         `⚠️ Table "${finalName}" already exists at:\n${bridgeTargetPath}\n\n` +
-        `\`generate_smart_table\` is for **NEW** tables only.\n` +
+        `\`generate_smart(objectType="table")\` is for **NEW** tables only.\n` +
         `Use \`modify_d365fo_file\` to add fields, methods, or indexes to an existing table.\n` +
         `Use \`get_object_info(objectType="table", name="${finalName}")\` to inspect the current structure.`
       );
@@ -831,7 +833,7 @@ export async function handleGenerateSmartTable(
               projectMessage,
               ``,
               `⛔ DO NOT call \`create_d365fo_file\` — the file is already written to disk.`,
-              `⛔ DO NOT call \`generate_smart_table\` again — task is COMPLETE.`,
+              `⛔ DO NOT call \`generate_smart\` again — task is COMPLETE.`,
               ``,
               `Next steps for the user:`,
               `1. Reload the project in Visual Studio (or close/reopen solution)`,
@@ -874,7 +876,7 @@ export async function handleGenerateSmartTable(
       `❌ Cannot create D365FO file on non-Windows system!\n\n` +
       `Attempting to create: ${normalizedPath}\n` +
       `Running on: ${process.platform}\n\n` +
-      `The generate_smart_table tool requires direct access to the D365FO Windows VM.\n` +
+      `The generate_smart tool (objectType="table") requires direct access to the D365FO Windows VM.\n` +
       `Run the MCP server locally on the D365FO Windows VM.`
     );
   }
@@ -899,7 +901,7 @@ export async function handleGenerateSmartTable(
   if (fs.existsSync(normalizedPath)) {
     throw new Error(
       `⚠️ Table "${finalName}" already exists at:\n${normalizedPath}\n\n` +
-      `\`generate_smart_table\` is for **NEW** tables only.\n` +
+      `\`generate_smart(objectType="table")\` is for **NEW** tables only.\n` +
       `Use \`modify_d365fo_file\` to add fields, methods, or indexes to an existing table.\n` +
       `Use \`get_object_info(objectType="table", name="${finalName}")\` to inspect the current structure.`
     );
@@ -954,7 +956,7 @@ export async function handleGenerateSmartTable(
           projectMessage,
           ``,
           `⛔ DO NOT call \`create_d365fo_file\` — the file is already written to disk.`,
-          `⛔ DO NOT call \`generate_smart_table\` again — task is COMPLETE.`,
+          `⛔ DO NOT call \`generate_smart\` again — task is COMPLETE.`,
           ``,
           `Next steps for the user:`,
           `1. Reload the project in Visual Studio (or close/reopen solution)`,

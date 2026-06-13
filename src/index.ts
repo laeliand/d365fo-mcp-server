@@ -127,7 +127,7 @@ async function initializeServices() {
 
   // -----------------------------------------------------------------------
   // write-only mode: skip all database/symbol work — LOCAL_TOOLS
-  // (create_d365fo_file, modify_d365fo_file, create_label, verify_d365fo_project,
+  // (create_d365fo_file, modify_d365fo_file, labels, verify_d365fo_project,
   //  get_workspace_info etc.) only need the config manager for path resolution,
   //  not the 1.5 GB symbol database.
   // -----------------------------------------------------------------------
@@ -580,13 +580,13 @@ async function main() {
     });
 
     // Log tool count immediately (transport is already connected)
-    const totalTools = 52;
+    const totalTools = 47;
     const localToolCount = LOCAL_TOOLS.size;
     const toolCount = SERVER_MODE === 'write-only' ? localToolCount :
                      SERVER_MODE === 'read-only' ? totalTools - localToolCount : totalTools;
     const toolDesc = SERVER_MODE === 'write-only' ? `(${Array.from(LOCAL_TOOLS).join(', ')})` :
                     SERVER_MODE === 'read-only' ? '(all except local tools)' :
-                    '(5 discovery + 4 object-info + 6 intelligent + 4 smart-gen + 3 pattern-analysis + 9 security-ext + 4 file-ops + 7 sdlc-build + 4 labels + 6 code-quality)';
+                    '(5 discovery + 4 object-info + 6 intelligent + 2 smart-gen + 3 pattern-analysis + 9 security-ext + 4 file-ops + 7 sdlc-build + 1 labels + 6 code-quality)';
     console.log(`🎯 Registered ${toolCount} X++ MCP tools ${toolDesc}`);
     serverState.isReady = true;
     serverState.isHealthy = true;
@@ -682,10 +682,7 @@ async function main() {
           { name: 'code_completion',              desc: 'IntelliSense-style method/field listing on any object' },
         ]},
         { icon: '🏷️ ', category: 'Label Management', tools: [
-          { name: 'search_labels',                desc: 'Full-text search across all AxLabelFile labels' },
-          { name: 'get_label_info',               desc: 'Get all language translations for a label ID' },
-          { name: 'create_label',                 desc: 'Add new label to all language files in a model' },
-          { name: 'rename_label',                 desc: 'Rename a label ID in .label.txt, X++ and XML metadata' },
+          { name: 'labels',                       desc: 'Unified label ops: action=search|info|create|rename (read/write)' },
         ]},
         { icon: '📊', category: 'Advanced Object Info', tools: [
           { name: 'get_object_info',              desc: 'Read any object by objectType: class/table/form/query/view/enum/edt/report/data-entity/menu-item/service/map/config-key/security-policy/macro' },
@@ -702,9 +699,7 @@ async function main() {
           { name: 'get_api_usage_patterns',       desc: 'Show how an API is initialized and called' },
         ]},
         { icon: '🎨', category: 'Smart Object Generation', tools: [
-          { name: 'generate_smart_table',         desc: 'AI-driven table generation with pattern analysis' },
-          { name: 'generate_smart_form',          desc: 'AI-driven form generation with pattern analysis' },
-          { name: 'generate_smart_report',        desc: 'AI-driven SSRS report generation (TmpTable + Contract + DP + Controller + AxReport)' },
+          { name: 'generate_smart',               desc: 'Unified pattern-aware generator: objectType=table|form|report' },
           { name: 'suggest_edt',                  desc: 'Suggest EDT for field name using fuzzy matching' },
         ]},
         { icon: '📝', category: 'File & Metadata Operations', tools: [

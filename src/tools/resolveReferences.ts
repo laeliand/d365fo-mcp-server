@@ -517,8 +517,8 @@ export function resolveXppReferences(code: string, deps: ResolverDeps): ResolveR
           line: lineOf(code, s.index),
           identifier: `@${fileId}:${labelId}`,
           detail: fileKnown
-            ? `Label id "${labelId}" not found in label file "${fileId}". Use search_labels to find the right id or create_label to add it.`
-            : `Label file "${fileId}" not found in the index. If it is new, create the label first (create_label), then re-run.`,
+            ? `Label id "${labelId}" not found in label file "${fileId}". Use labels to find the right id or labels to add it.`
+            : `Label file "${fileId}" not found in the index. If it is new, create the label first (labels), then re-run.`,
         });
       }
     } else if (legacy) {
@@ -530,7 +530,7 @@ export function resolveXppReferences(code: string, deps: ResolverDeps): ResolveR
           severity: 'warning',
           line: lineOf(code, s.index),
           identifier: `@${legacy[1]}`,
-          detail: `Legacy label "@${legacy[1]}" not found in the labels index. Verify with get_label_info.`,
+          detail: `Legacy label "@${legacy[1]}" not found in the labels index. Verify with labels.`,
         });
       }
     }

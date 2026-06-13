@@ -56,7 +56,7 @@ export async function getLabelInfoTool(request: CallToolRequest, context: XppSer
         lines.push('');
       }
       lines.push(
-        `💡 Use search_labels to find a label by text, or get_label_info with labelId to see all translations.`,
+        `💡 Use labels(action="search") to find a label by text, or labels(action="info") with labelId to see all translations.`,
       );
       return { content: [{ type: 'text', text: lines.join('\n') }] };
     }
@@ -74,7 +74,7 @@ export async function getLabelInfoTool(request: CallToolRequest, context: XppSer
               (labelFileId ? ` in label file "${labelFileId}"` : '') +
               (model ? ` in model "${model}"` : '') +
               '.\n\n' +
-              `💡 Try search_labels to find labels by text, or omit labelId to list available label files.`,
+              `💡 Try labels(action="search") to find labels by text, or omit labelId to list available label files.`,
           },
         ],
         isError: true,

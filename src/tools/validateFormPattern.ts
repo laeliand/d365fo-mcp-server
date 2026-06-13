@@ -143,7 +143,7 @@ export async function validateFormPatternTool(
   };
 }
 
-// ── Write-gate helper (used by create_d365fo_file / generate_smart_form) ────
+// ── Write-gate helper (used by create_d365fo_file / generate_smart) ────
 
 /** FORM_PATTERN_ENFORCE defaults to enabled; set to 'false'/'0' to disable blocking. */
 export function isFormPatternEnforceEnabled(): boolean {

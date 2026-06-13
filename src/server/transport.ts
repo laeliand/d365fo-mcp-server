@@ -47,7 +47,7 @@ const FAST_TOOLS = new Set<string>([
   'get_object_info',
   'get_method_signature', 'get_method_source',
   'get_table_extension_info', 'get_security_artifact_info',
-  'search_labels', 'get_label_info',
+  // `labels` is NOT here — write actions (create/rename) can scan many files and exceed the fast timeout.
 ]);
 
 function resolveToolTimeout(toolName: string | undefined): number {

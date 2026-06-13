@@ -679,7 +679,7 @@ function ssrsReportFullTemplate(name: string): string {
 //   2. ${name}Contract  — DataContract class (below)
 //   3. ${name}DP        — Data Provider class (below)
 //   4. ${name}Controller — Report controller (below)
-//   5. ${name}.xml      — AxReport with RDL design (use generate_smart_report)
+//   5. ${name}.xml      — AxReport with RDL design (use generate_smart)
 // ══════════════════════════════════════════════════════════════════
 
 // ── 1. DataContract ─────────────────────────────────────────────────────────

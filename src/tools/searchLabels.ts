@@ -53,7 +53,7 @@ export async function searchLabelsTool(request: CallToolRequest, context: XppSer
               (language !== 'en-US' ? ` in language "${language}"` : '') +
               (model ? ` in model "${model}"` : '') +
               '.\n\n' +
-              `💡 Tip: Use create_label to add a new label to your custom model.\n` +
+              `💡 Tip: Use labels(action="create") to add a new label to your custom model.\n` +
               `💡 To search a different language use the language parameter (e.g. "cs", "de", "sk").`,
           },
         ],

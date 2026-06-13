@@ -29,8 +29,7 @@
  * Members:
  *  create_d365fo_file   — writes XML to K:\PackagesLocalDirectory
  *  modify_d365fo_file   — edits XML on K:\PackagesLocalDirectory
- *  create_label         — writes to K:\PackagesLocalDirectory label files
- *  rename_label         — rewrites label files + all source references on K:\
+ *  labels (write actions — create/rename) — writes to / rewrites K:\PackagesLocalDirectory label files + source references
  *  verify_d365fo_project — reads .rnrproj from K:\VSProjects
  *  get_workspace_info   — scans .rnrproj via D365FO_SOLUTIONS_PATH (K:\); reads
  *                         .mcp.json + in-memory config/stdio session state;
@@ -40,8 +39,6 @@
 export const LOCAL_TOOLS = new Set([
   'create_d365fo_file',
   'modify_d365fo_file',
-  'create_label',
-  'rename_label',
   'verify_d365fo_project',
   'update_symbol_index',
   'build_d365fo_project',
@@ -72,6 +69,11 @@ export const LOCAL_TOOLS = new Set([
  */
 export const ALWAYS_TOOLS = new Set([
   'get_object_info',
+  // `labels` mixes read (search/info) and write (create/rename) actions.
+  // The read actions must work on Azure read-only; the write actions need K:\
+  // access and are gated at runtime by the underlying handler returning a clear
+  // error when the local filesystem isn't reachable.
+  'labels',
 ]);
 
 /**

@@ -280,7 +280,7 @@ async function renderRecommendation(symbolIndex: any, input: RecommendInput): Pr
   lines.push('');
   lines.push('## ✅ Next step (cloning is the preferred workflow)');
   lines.push('```');
-  lines.push(`generate_smart_form(`);
+  lines.push(`generate_smart(objectType="form", `);
   lines.push(`  name="MyNewForm",`);
   lines.push(`  cloneFrom="${cloneSource}",`);
   lines.push(`  tableMapping={${enriched.tableName ? `"<sourceTable>": "${enriched.tableName}"` : `"<sourceTable>": "<yourTable>"`}},`);

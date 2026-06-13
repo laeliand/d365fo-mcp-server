@@ -557,7 +557,7 @@ Extensions: objectName="BaseObject.PrefixExtension" (e.g. "CustTable.ContosoExte
                 description:
                   'Complete XML to write verbatim instead of generating a template. ' +
                   'Use with overwrite=true to completely rewrite an existing object. ' +
-                  'Also used in Azure/Linux setups: generate XML via generate_smart_table/form, then pass here.',
+                  'Also used in Azure/Linux setups: generate XML via generate_smart/form, then pass here.',
               },
               overwrite: {
                 type: 'boolean',
@@ -921,86 +921,52 @@ Extensions: objectName="BaseObject.PrefixExtension" (e.g. "CustTable.ContosoExte
           },
         },
         {
-          name: 'search_labels',
-          description: 'Full-text search across indexed D365FO label files. Search by text, label ID, or comment. Returns label IDs, translations, and @LabelFileId:LabelId reference syntax. ALWAYS search before create_label.',
+          name: 'labels',
+          description:
+            'Unified label operations — read and write. Choose an `action`:\n' +
+            '• search → full-text query across indexed label files (read). Always run before action=create.\n' +
+            '• info → all language translations for a labelId, OR list available label files when labelId is omitted (read).\n' +
+            '• create → add a new label to an AxLabelFile, write into every language .label.txt, create XML descriptors if missing (write). Label IDs describe MEANING — never add a model prefix.\n' +
+            '• rename → rename a label ID across .label.txt + X++ + XML metadata + SQLite index. Use dryRun=true first (write).',
           inputSchema: {
             type: 'object',
             properties: {
-              query: {
+              action: {
                 type: 'string',
-                description: 'Search text — searches label ID, text and developer comment',
+                enum: ['search', 'info', 'create', 'rename'],
+                description: 'Label operation to perform.',
+              },
+              // ── shared filters ─────────────────────────────────────────────
+              model: {
+                type: 'string',
+                description: '[search|info|create|rename] Model that owns the label file (e.g. ContosoExt).',
+              },
+              labelFileId: {
+                type: 'string',
+                description: '[search|info|create|rename] AxLabelFile ID (e.g. ContosoExt, SYS).',
               },
               language: {
                 type: 'string',
-                description: 'Language/locale to search in (default: en-US). Examples: cs, de, sk',
-              },
-              model: {
-                type: 'string',
-                description: 'Restrict to a specific model (e.g. ContosoExt, ApplicationPlatform)',
-              },
-              labelFileId: {
-                type: 'string',
-                description: 'Restrict to a specific label file ID (e.g. ContosoExt, SYS)',
+                description: '[search] Language/locale (default: en-US). Examples: cs, de, sk.',
               },
               limit: {
                 type: 'number',
-                description: 'Maximum number of results (default 30)',
+                description: '[search] Maximum number of results (default 30).',
               },
-            },
-            required: ['query'],
-          },
-        },
-        {
-          name: 'get_label_info',
-          description: 'Get all language translations for a label ID, or list available label files in a model. Returns translations, developer comment, and @LabelFileId:LabelId reference syntax.',
-          inputSchema: {
-            type: 'object',
-            properties: {
+              // ── action=search ──────────────────────────────────────────────
+              query: {
+                type: 'string',
+                description: '[search] REQUIRED. Search text — matches label ID, text and developer comment.',
+              },
+              // ── action=info ────────────────────────────────────────────────
               labelId: {
                 type: 'string',
-                description: 'Exact label ID (e.g. MyFeature). Omit to list available label files.',
+                description: '[info] Exact label ID. Omit for action=info to list available label files for the model.',
               },
-              labelFileId: {
-                type: 'string',
-                description: 'Label file ID (e.g. ContosoExt, SYS)',
-              },
-              model: {
-                type: 'string',
-                description: 'Model to filter by (e.g. ContosoExt)',
-              },
-            },
-            required: [],
-          },
-        },
-        {
-          name: 'create_label',
-          description: 'Add a new label to an existing AxLabelFile. Writes into every language .label.txt, creates XML descriptors if missing, updates SQLite index. ALWAYS call search_labels first. Label IDs describe meaning — never add model prefix.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              labelId: {
-                type: 'string',
-                description:
-                  'Unique label identifier (alphanumeric). ' +
-                  '⛔ NEVER add a model/object prefix — label IDs describe meaning, not ownership. ' +
-                  'Good: "CustomerName", "InvoiceDate", "ErrorAmountNegative". ' +
-                  'Bad (prefixed): "MyModelCustomerName", "ContosoExtInvoiceDate".',
-              },
-              labelFileId: {
-                type: 'string',
-                description: 'Label file ID (e.g. ContosoExt)',
-              },
-              model: {
-                type: 'string',
-                description: 'Model name that owns the label file (e.g. ContosoExt)',
-              },
-              packageName: {
-                type: 'string',
-                description: 'Package name for the model. Auto-resolved if omitted.',
-              },
+              // ── action=create ──────────────────────────────────────────────
               translations: {
                 type: 'array',
-                description: 'Translations for each language. Provide at least en-US.',
+                description: '[create] REQUIRED. Translations for each language. Provide at least en-US.',
                 items: {
                   type: 'object',
                   properties: {
@@ -1013,92 +979,77 @@ Extensions: objectName="BaseObject.PrefixExtension" (e.g. "CustTable.ContosoExte
               },
               defaultComment: {
                 type: 'string',
-                description: 'Developer comment for languages without explicit comment',
+                description: '[create] Developer comment for languages without explicit comment.',
               },
               description: {
                 type: 'string',
-                description: 'Label description (comment line in .label.txt). Defaults to VS project name from .rnrproj when omitted, then falls back to labelFileId. Per-translation comment and defaultComment take priority.',
+                description:
+                  '[create] Label description (comment line in .label.txt). Defaults to VS project name from .rnrproj when omitted, then falls back to labelFileId. ' +
+                  'Per-translation comment and defaultComment take priority.',
+              },
+              packageName: {
+                type: 'string',
+                description: '[create|rename] Package name for the model. Auto-resolved if omitted.',
               },
               packagePath: {
                 type: 'string',
-                description: 'Root packages path. Auto-detected from environment config if omitted.',
+                description: '[create|rename] Root packages path. Auto-detected from environment config if omitted.',
               },
               projectPath: {
                 type: 'string',
-                description: 'Path to the .rnrproj project file. Auto-detected from .mcp.json if omitted.',
+                description: '[create] Path to the .rnrproj project file. Auto-detected from .mcp.json if omitted.',
               },
               solutionPath: {
                 type: 'string',
-                description: 'Path to the .sln solution directory. Fallback to find .rnrproj if projectPath is not set.',
+                description: '[create] Path to the .sln solution directory. Fallback to find .rnrproj if projectPath is not set.',
               },
               addToProject: {
                 type: 'boolean',
-                description: 'Add label file XML descriptors to the VS project (default: true)',
+                description: '[create] Add label file XML descriptors to the VS project (default: true).',
               },
               createLabelFileIfMissing: {
                 type: 'boolean',
-                description: 'Create AxLabelFile structure if missing (default: false)',
-              },
-              updateIndex: {
-                type: 'boolean',
-                description: 'Update MCP label index after writing (default: true)',
+                description: '[create] Create AxLabelFile structure if missing (default: false).',
               },
               sortLabels: {
                 type: 'boolean',
                 description:
-                  'Sort labels alphabetically when writing .label.txt files (default: true). ' +
+                  '[create] Sort labels alphabetically when writing .label.txt files (default: true). ' +
                   'Set to false to append new labels at the end preserving existing file order. ' +
                   'Defaults to LABEL_SORT_ORDER env var ("alphabetical" = true, "append" = false).',
               },
-            },
-            required: ['labelId', 'labelFileId', 'model', 'translations'],
-          },
-        },
-        {
-          name: 'rename_label',
-          description: `Rename a D365FO label ID across all .label.txt files, X++ sources, and XML metadata in the model. Also updates the SQLite label index. Use dryRun=true first to preview impact.`,
-          inputSchema: {
-            type: 'object',
-            properties: {
+              languages: {
+                type: 'array',
+                items: { type: 'string' },
+                description:
+                  '[create] Restrict which language .label.txt files are written/created (e.g. ["en-US"] for English-only). ' +
+                  'When omitted, the label is written to every language folder already present in the model.',
+              },
+              // ── action=rename ──────────────────────────────────────────────
               oldLabelId: {
                 type: 'string',
-                description: 'Current label ID to rename (e.g. MyOldField)',
+                description: '[rename] REQUIRED. Current label ID (e.g. MyOldField).',
               },
               newLabelId: {
                 type: 'string',
-                description: 'New label ID — must be alphanumeric, no spaces (e.g. MyRenamedField)',
-              },
-              labelFileId: {
-                type: 'string',
-                description: 'Label file ID that owns the label (e.g. ContosoExt, SYS)',
-              },
-              model: {
-                type: 'string',
-                description: 'Model name that owns the label file (e.g. ContosoExt)',
-              },
-              packageName: {
-                type: 'string',
-                description: 'Package name for the model. Auto-resolved if omitted.',
-              },
-              packagePath: {
-                type: 'string',
-                description: 'Root PackagesLocalDirectory path. Auto-detected if omitted.',
+                description: '[rename] REQUIRED. New label ID — must be alphanumeric, no spaces.',
               },
               searchPaths: {
                 type: 'array',
                 items: { type: 'string' },
-                description: 'Additional absolute directory paths to scan for X++ / XML references.',
+                description: '[rename] Additional absolute directory paths to scan for X++ / XML references.',
               },
               dryRun: {
                 type: 'boolean',
-                description: 'Preview changes without writing anything (default: false). Use this first!',
+                description: '[rename] Preview changes without writing anything (default: false). Use this first!',
               },
+              // ── shared write knob ──────────────────────────────────────────
               updateIndex: {
                 type: 'boolean',
-                description: 'Update the MCP label index after renaming (default: true)',
+                description: '[create|rename] Update the MCP label index after writing (default: true).',
               },
             },
-            required: ['oldLabelId', 'newLabelId', 'labelFileId', 'model'],
+            required: ['action'],
           },
         },
         {
@@ -1128,7 +1079,7 @@ Extensions: objectName="BaseObject.PrefixExtension" (e.g. "CustTable.ContosoExte
           name: 'get_form_patterns',
           description: 'Form pattern advisor + usage analysis. ' +
             'RECOMMEND MODE (preferred when creating a new form): pass recommend={entityKind, hasHeaderLines, fieldCount, usageIntent, tableName} ' +
-            'to get the right pattern via the Microsoft decision tree, reference forms to clone, and the exact next generate_smart_form call. ' +
+            'to get the right pattern via the Microsoft decision tree, reference forms to clone, and the exact next generate_smart call. ' +
             'ANALYSIS MODE: filter by formPattern, dataSource table name, or similarTo form.',
           inputSchema: {
             type: 'object',
@@ -1206,150 +1157,104 @@ Extensions: objectName="BaseObject.PrefixExtension" (e.g. "CustTable.ContosoExte
           },
         },
         {
-          name: 'generate_smart_table',
-          description: 'AI-driven table generation with intelligent field/index/relation suggestions from pattern analysis. Strategies: copyFrom existing table, tableGroup + generateCommonFields, or fieldsHint with auto-suggested EDTs. Returns complete XML for create_d365fo_file.',
+          name: 'generate_smart',
+          description:
+            'Unified pattern-aware code generator. Choose `objectType`:\n' +
+            '• table → AxTable XML with intelligent field/index/relation suggestions (copyFrom, tableGroup + generateCommonFields, or fieldsHint with auto-EDTs).\n' +
+            '• form → pattern-aware form generation. PREFERRED: cloneFrom + tableMapping. Alternative: formPattern + dataSource. Output validated against form-pattern catalog.\n' +
+            '• report → full SSRS stack (TmpTable + Contract + DP + Controller + AxReport+RDL) in one call; fieldsHint or fields for the TmpTable, contractParams for the dialog.\n' +
+            'For tables/forms: returns XML for create_d365fo_file. For reports on Windows: files written directly; on Azure/Linux: call create_d365fo_file for each returned object.',
           inputSchema: {
             type: 'object',
             properties: {
+              objectType: {
+                type: 'string',
+                enum: ['table', 'form', 'report'],
+                description: 'Kind of object to generate.',
+              },
+              // ── shared identity / placement ────────────────────────────────
               name: {
                 type: 'string',
-                description: 'Table name (e.g., "MyCustomTable")',
+                description:
+                  'REQUIRED. Object name. For report: BASE name WITHOUT model prefix (prefix applied automatically).',
               },
               label: {
                 type: 'string',
-                description: 'Optional label for the table',
+                description: '[table|form] Optional label for the generated object.',
               },
+              caption: {
+                type: 'string',
+                description: '[form|report] Optional caption/title (form: window title; report: human-readable report title).',
+              },
+              modelName: {
+                type: 'string',
+                description: 'Model name (auto-detected from projectPath).',
+              },
+              projectPath: {
+                type: 'string',
+                description: 'Path to .rnrproj file for model extraction.',
+              },
+              solutionPath: {
+                type: 'string',
+                description: 'Path to solution directory (alternative to projectPath).',
+              },
+              packagePath: {
+                type: 'string',
+                description: '[report] Base packages directory path.',
+              },
+              // ── objectType=table ───────────────────────────────────────────
               tableGroup: {
                 type: 'string',
                 description:
-                  'Business role (TableGroup enum): Main (master, CustTable), Transaction (CustTrans), Parameter (CustParameters), ' +
+                  '[table] Business role (TableGroup enum): Main (master, CustTable), Transaction (CustTrans), Parameter (CustParameters), ' +
                   'Group (CustGroup), WorksheetHeader/WorksheetLine (SalesTable/SalesLine), Reference, Miscellaneous, Framework. ' +
                   '⛔ NEVER pass "TempDB"/"InMemory" here — that is tableType.',
               },
               tableType: {
                 type: 'string',
                 description:
-                  'Storage type: Regular (default, omit), TempDB (SQL temp, efficient joins), ' +
+                  '[table] Storage type: Regular (default, omit), TempDB (SQL temp, efficient joins), ' +
                   'InMemory (AOS-tier ISAM, inefficient joins). ⛔ NEVER pass as tableGroup.',
-              },
-              copyFrom: {
-                type: 'string',
-                description: 'Optional: Copy structure from existing table name',
-              },
-              fieldsHint: {
-                type: 'string',
-                description: 'Optional: Comma-separated field hints (e.g., "RecId, Name, Amount")',
               },
               generateCommonFields: {
                 type: 'boolean',
-                description: 'If true, auto-generate common fields based on table group patterns',
+                description: '[table] If true, auto-generate common fields based on table group patterns.',
               },
-              modelName: {
-                type: 'string',
-                description: 'Model name (auto-detected from projectPath)',
-              },
-              projectPath: {
-                type: 'string',
-                description: 'Path to .rnrproj file for model extraction',
-              },
-              solutionPath: {
-                type: 'string',
-                description: 'Path to solution directory (alternative to projectPath)',
-              },
-            },
-            required: ['name'],
-          },
-        },
-        {
-          name: 'generate_smart_form',
-          description: 'Pattern-aware form generation. PREFERRED strategy: cloneFrom an existing reference form ' +
-            '(full control hierarchy + patterns preserved, datasources re-bound via tableMapping). ' +
-            'Alternative: template generation via formPattern + dataSource. ' +
-            'Output is validated against the form-pattern catalog (validate_form_pattern) before returning. ' +
-            'Use get_form_patterns(recommend) first to pick the pattern and a reference form to clone.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              name: {
-                type: 'string',
-                description: 'Form name (e.g., "MyCustomForm")',
-              },
-              label: {
-                type: 'string',
-                description: 'Optional label for the form',
-              },
-              caption: {
-                type: 'string',
-                description: 'Optional caption/title',
-              },
+              // ── objectType=form ────────────────────────────────────────────
               dataSource: {
                 type: 'string',
-                description: 'Optional: Table name for primary datasource',
+                description: '[form] Optional: Table name for primary datasource.',
               },
               formPattern: {
                 type: 'string',
-                description: 'Optional: Form pattern (SimpleList, SimpleListDetails, DetailsMaster, DetailsTransaction, Dialog, DropDialog, TableOfContents, Lookup, ListPage, Workspace)',
-              },
-              copyFrom: {
-                type: 'string',
-                description: 'Optional (legacy): Copy datasource list from existing form. Prefer cloneFrom.',
+                description:
+                  '[form] Optional: Form pattern (SimpleList, SimpleListDetails, DetailsMaster, DetailsTransaction, Dialog, DropDialog, TableOfContents, Lookup, ListPage, Workspace).',
               },
               cloneFrom: {
                 type: 'string',
-                description: 'PREFERRED: clone a reference form\'s full XML (controls + patterns), re-bound via tableMapping ' +
+                description:
+                  '[form] PREFERRED: clone a reference form\'s full XML (controls + patterns), re-bound via tableMapping ' +
                   '(e.g. CustGroup→SimpleList, PaymTerm→SimpleListDetails, CustParameters→TableOfContents). ' +
                   'Methods except classDeclaration are stripped; fields missing on target tables are dropped and reported.',
               },
               tableMapping: {
                 type: 'object',
                 additionalProperties: { type: 'string' },
-                description: 'With cloneFrom: sourceTable → targetTable map, e.g. {"CustGroup": "MyRentalGroup"}.',
+                description: '[form] With cloneFrom: sourceTable → targetTable map, e.g. {"CustGroup": "MyRentalGroup"}.',
               },
               includeMethodStubs: {
                 type: 'boolean',
-                description: 'Inject pattern-appropriate lifecycle method stubs (form init/executeQuery/closeOk, datasource initValue/active/validateWrite) with TODO markers.',
+                description:
+                  '[form] Inject pattern-appropriate lifecycle method stubs (form init/executeQuery/closeOk, datasource initValue/active/validateWrite) with TODO markers.',
               },
               generateControls: {
                 type: 'boolean',
-                description: 'If true, auto-generate grid controls for datasource',
+                description: '[form] If true, auto-generate grid controls for datasource.',
               },
-              modelName: {
-                type: 'string',
-                description: 'Model name (auto-detected from projectPath)',
-              },
-              projectPath: {
-                type: 'string',
-                description: 'Path to .rnrproj file for model extraction',
-              },
-              solutionPath: {
-                type: 'string',
-                description: 'Path to solution directory (alternative to projectPath)',
-              },
-            },
-            required: ['name'],
-          },
-        },
-        {
-          name: 'generate_smart_report',
-          description: `AI-driven SSRS report generation — creates up to 5 objects (TmpTable, Contract, DP, Controller, AxReport+RDL) in one call. Use fieldsHint or fields for field specs, contractParams for dialog parameters. Never add model prefix to name — auto-applied. On Azure/Linux: call create_d365fo_file for each returned object. On Windows: files are written directly.`,
-          inputSchema: {
-            type: 'object',
-            properties: {
-              name: {
-                type: 'string',
-                description: 'Base report name WITHOUT model prefix (e.g. "InventByZones"). Prefix applied automatically.',
-              },
-              caption: {
-                type: 'string',
-                description: 'Human-readable caption/title for the report (e.g. "Inventory by Zones").',
-              },
-              fieldsHint: {
-                type: 'string',
-                description: 'Comma-separated field names for the TmpTable (e.g. "ItemId, ItemName, Qty, Zone"). EDTs auto-suggested.',
-              },
+              // ── objectType=report ──────────────────────────────────────────
               fields: {
                 type: 'array',
-                description: 'Structured field specs. Takes priority over fieldsHint.',
+                description: '[report] Structured TmpTable field specs. Takes priority over fieldsHint.',
                 items: {
                   type: 'object',
                   properties: {
@@ -1363,7 +1268,7 @@ Extensions: objectName="BaseObject.PrefixExtension" (e.g. "CustTable.ContosoExte
               },
               contractParams: {
                 type: 'array',
-                description: 'Dialog parameters for the Contract class.',
+                description: '[report] Dialog parameters for the Contract class.',
                 items: {
                   type: 'object',
                   properties: {
@@ -1377,34 +1282,25 @@ Extensions: objectName="BaseObject.PrefixExtension" (e.g. "CustTable.ContosoExte
               },
               generateController: {
                 type: 'boolean',
-                description: 'Generate Controller class (default: true)',
+                description: '[report] Generate Controller class (default: true).',
               },
               designStyle: {
                 type: 'string',
-                description: 'RDL design pattern: "SimpleList" (default) or "GroupedWithTotals"',
+                description: '[report] RDL design pattern: "SimpleList" (default) or "GroupedWithTotals".',
               },
+              // ── shared input shapes ────────────────────────────────────────
               copyFrom: {
                 type: 'string',
-                description: 'Copy field structure from existing report name',
+                description:
+                  '[table|form|report] Copy structure from existing object: table fields/indexes/relations; form datasources (legacy — prefer cloneFrom for forms); report field structure.',
               },
-              modelName: {
+              fieldsHint: {
                 type: 'string',
-                description: 'Model name (auto-detected from projectPath)',
-              },
-              projectPath: {
-                type: 'string',
-                description: 'Path to .rnrproj file',
-              },
-              solutionPath: {
-                type: 'string',
-                description: 'Path to solution directory',
-              },
-              packagePath: {
-                type: 'string',
-                description: 'Base packages directory path',
+                description:
+                  '[table|report] Comma-separated field names (e.g. "RecId, Name, Amount" for tables, "ItemId, ItemName, Qty, Zone" for reports). EDTs auto-suggested.',
               },
             },
-            required: ['name'],
+            required: ['objectType', 'name'],
           },
         },
       // ── New tools: security, menu items, extensions ──────────────────────────────
@@ -1838,7 +1734,7 @@ Extensions: objectName="BaseObject.PrefixExtension" (e.g. "CustTable.ContosoExte
           'Structural form-pattern validator (<50 ms, offline): container hierarchy/order, allowed child types, ' +
           'sub-patterns, PatternVersion, datasource expectations. Returns violations {rule, severity, path, excerpt, fix} (FP001-FP010). ' +
           'Structural errors BLOCK form writes when FORM_PATTERN_ENFORCE=true (default). ' +
-          'Call after generate_smart_form / manual form XML edits, before create_d365fo_file.',
+          'Call after generate_smart / manual form XML edits, before create_d365fo_file.',
         inputSchema: {
           type: 'object',
           properties: {

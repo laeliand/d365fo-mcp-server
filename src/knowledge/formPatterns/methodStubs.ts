@@ -2,7 +2,7 @@
  * Per-pattern FormRun / datasource lifecycle method stubs.
  *
  * Stubs are correct-signature skeletons with super() calls and TODO markers —
- * injected by generate_smart_form when includeMethodStubs=true, and exposed
+ * injected by generate_smart when includeMethodStubs=true, and exposed
  * through get_form_pattern_spec as lifecycle guidance.
  */
 

@@ -264,8 +264,8 @@ ttscommit;`,
       'A label reference (e.g. "@MyModel:LabelId") points to a label ID that does not exist in the label file. ' +
       'D365FO will show the raw label ID in the UI at runtime.',
     fix: [
-      'Use search_labels("text") to find an existing label that fits',
-      'Use create_label() to create a new label in the model\'s label file',
+      'Use labels(action="search", "text") to find an existing label that fits',
+      'Use labels(action="create") to create a new label in the model\'s label file',
       'Verify the label file ID prefix matches (e.g. "@ContosoExt:LabelId" requires a ContosoExt.en-US.label.txt file)',
       'Never use hardcoded strings — always use label references in X++ attributes and XML properties',
     ],

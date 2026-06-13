@@ -235,7 +235,7 @@ export async function renameLabelTool(request: CallToolRequest, context: XppServ
           text:
             `❌ Label "${oldLabelId}" not found in any .label.txt file of ` +
             `label file "${labelFileId}" in model "${model}".\n\n` +
-            `Use search_labels or get_label_info to verify the label ID and label file.`,
+            `Use labels(action="search") or labels(action="info") to verify the label ID and label file.`,
         }],
         isError: true,
       };

@@ -49,26 +49,31 @@ export function buildProgressMessage(toolName: string, args: Record<string, any>
       return `🔧 Generating XML for ${a.objectType ?? 'object'} ${a.objectName ?? ''}`;
     case 'modify_d365fo_file':
       return `✏️ ${a.operation ?? 'Modifying'} on ${a.objectType ?? 'object'} ${a.objectName ?? ''}`;
-    case 'generate_smart_table':
-      return `🏗️ Generating smart table ${a.name ?? ''}`;
-    case 'generate_smart_form':
-      return `🏗️ Generating smart form ${a.name ?? ''}`;
-    case 'generate_smart_report':
-      return `🏗️ Generating smart report ${a.name ?? ''}`;
+    case 'generate_smart': {
+      const kind = (a.objectType as string) ?? 'object';
+      return `🏗️ Generating smart ${kind} ${a.name ?? ''}`;
+    }
     case 'get_table_patterns':
       return `📐 Getting table patterns${a.tableGroup ? ` [${a.tableGroup}]` : ''}${a.similarTo ? ` similar to ${a.similarTo}` : ''}`;
     case 'get_form_patterns':
       return `📐 Getting form patterns${a.formPattern ? ` [${a.formPattern}]` : ''}`;
     case 'suggest_edt':
       return `💡 Suggesting EDT for field "${a.fieldName ?? ''}"`;
-    case 'search_labels':
-      return `🏷️ Searching labels: "${a.query ?? ''}"`;
-    case 'get_label_info':
-      return `🏷️ Reading label info${a.labelId ? ` for ${a.labelId}` : ''}`;
-    case 'create_label':
-      return `🏷️ Creating label ${a.labelId ?? ''}`;
-    case 'rename_label':
-      return `🏷️ Renaming label ${a.oldLabelId ?? ''} → ${a.newLabelId ?? ''}`;
+    case 'labels': {
+      const action = (a.action as string) ?? '';
+      switch (action) {
+        case 'search':
+          return `🏷️ Searching labels: "${a.query ?? ''}"`;
+        case 'info':
+          return `🏷️ Reading label info${a.labelId ? ` for ${a.labelId}` : ''}`;
+        case 'create':
+          return `🏷️ Creating label ${a.labelId ?? ''}`;
+        case 'rename':
+          return `🏷️ Renaming label ${a.oldLabelId ?? ''} → ${a.newLabelId ?? ''}`;
+        default:
+          return `🏷️ Label operation${action ? ` (${action})` : ''}`;
+      }
+    }
     case 'validate_object_naming':
       return `✅ Validating name "${a.proposedName ?? ''}" for ${a.objectType ?? ''}`;
     case 'verify_d365fo_project':

@@ -128,10 +128,10 @@ Strategies:
 - additionalDatasets: extra TmpTables + DP getters for multi-dataset reports
 
 Examples:
-- generate_smart_report(name="InventByZones", fieldsHint="ItemId, ItemName, Qty, Zone", caption="Inventory by Zones")
-- generate_smart_report(name="CustBalance", fieldsHint="CustAccount, Name, Balance", contractParams=[{name:"FromDate",type:"TransDate",mandatory:true},{name:"ToDate",type:"TransDate"}])
-- generate_smart_report(name="SalesReport", copyFrom="SalesInvoice", designStyle="GroupedWithTotals")
-- generate_smart_report(name="CustOpenItems", fieldsHint="CustAccount, Amount, DueDate", callerTableName="CustTable", aotQuery="CustOpenTrans")`,
+- generate_smart(objectType="report", name="InventByZones", fieldsHint="ItemId, ItemName, Qty, Zone", caption="Inventory by Zones")
+- generate_smart(objectType="report", name="CustBalance", fieldsHint="CustAccount, Name, Balance", contractParams=[{name:"FromDate",type:"TransDate",mandatory:true},{name:"ToDate",type:"TransDate"}])
+- generate_smart(objectType="report", name="SalesReport", copyFrom="SalesInvoice", designStyle="GroupedWithTotals")
+- generate_smart(objectType="report", name="CustOpenItems", fieldsHint="CustAccount, Amount, DueDate", callerTableName="CustTable", aotQuery="CustOpenTrans")`,
   inputSchema: {
     type: 'object',
     properties: {
@@ -428,7 +428,7 @@ export async function handleGenerateSmartReport(
           `- \`fields=[{name:"ItemId", edt:"ItemId"}, ...]\` — structured specs`,
           `- \`copyFrom="ExistingReport"\` — copy from another report's TmpTable`,
           ``,
-          `⛔ No XML has been generated. Call \`generate_smart_report\` again with fields.`,
+          `⛔ No XML has been generated. Call \`generate_smart(objectType="report")\` again with fields.`,
         ].join('\n'),
       }],
       isError: true,
@@ -1109,7 +1109,7 @@ export async function handleGenerateSmartReport(
         results.join('\n'),
         ``,
         `⛔ DO NOT call \`create_d365fo_file\` — all files are already written to disk.`,
-        `⛔ DO NOT call \`generate_smart_report\` again — task is COMPLETE.`,
+        `⛔ DO NOT call \`generate_smart\` again — task is COMPLETE.`,
         ``,
         `Next steps:`,
         `1. Open Visual Studio and reload the project (close/reopen solution)`,

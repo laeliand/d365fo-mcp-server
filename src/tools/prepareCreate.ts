@@ -2,7 +2,7 @@
  * prepare_create — single-round context aggregator for NEW D365FO objects.
  *
  * Mirror of prepare_change for object creation: one call replaces the
- * search → validate_object_naming → suggest_edt → search_labels → patterns
+ * search → validate_object_naming → suggest_edt → labels → patterns
  * sequence (4–6 agentic rounds) with a single parallel query bundle:
  *   - name collision check (exact + prefix variants) against the symbol index
  *   - naming validation incl. the prefix the write tool will actually apply
@@ -152,12 +152,12 @@ function findReusableLabels(baseName: string, context: XppServerContext): string
     if (rows.length > 0) {
       return rows
         .map(r => `  @${r.labelFileId}:${r.labelId} = "${r.text}" (${r.model})`)
-        .join('\n') + '\n_Reuse instead of creating duplicates (rule: search_labels before create_label)._';
+        .join('\n') + '\n_Reuse instead of creating duplicates (rule: labels before labels)._';
     }
   } catch {
     // ignore
   }
-  return '(no matching labels — create new ones via create_label)';
+  return '(no matching labels — create new ones via labels)';
 }
 
 /** Mined property defaults for the object type (tables only for now). */

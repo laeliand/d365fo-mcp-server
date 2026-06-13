@@ -170,7 +170,7 @@ Expected response:
 {"status":"ok","mode":"read-only", ...}
 ```
 
-Confirm the tool count matches `read-only` mode (all tools except `create_d365fo_file`, `modify_d365fo_file`, `create_label`).
+Confirm the tool count matches `read-only` mode (all tools except `create_d365fo_file`, `modify_d365fo_file`, and the write actions of `labels`).
 
 ---
 

@@ -623,7 +623,7 @@ private static server str computePartyName()
 
 ## Workflow
 1. \`get_object_info(objectType: "data-entity", name: "...")\` — check if entity already exists
-2. \`generate_smart_table\` — for the staging table if needed
+2. \`generate_smart\` — for the staging table if needed
 3. \`create_d365fo_file(objectType: "view", ...)\` — create the entity file
 4. After deployment: refresh entity list in Data Management
 `,

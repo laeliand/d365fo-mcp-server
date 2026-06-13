@@ -16,7 +16,7 @@ Pick the right form pattern, base it on a standard form, and add lifecycle metho
 ```mermaid
 flowchart LR
     A["get_form_patterns<br/>recommend: setup, 5 fields"] -->|SimpleList + CustGroup| B["get_form_pattern_spec<br/>(SimpleList)"]
-    B --> C["generate_smart_form<br/>cloneFrom: CustGroup<br/>tableMapping: CustGroup→MyRentalGroup<br/>includeMethodStubs: true"]
+    B --> C["generate_smart<br/>objectType: form<br/>cloneFrom: CustGroup<br/>tableMapping: CustGroup→MyRentalGroup<br/>includeMethodStubs: true"]
     C --> D[validate_form_pattern]
     D -->|0 errors| E[create_d365fo_file]
     E --> F[verify_d365fo_project ✅]
@@ -44,8 +44,8 @@ then generate the CoC class that inserts an audit record after the base call.
 flowchart LR
     A[get_workspace_info] --> B["find_coc_extensions +<br/>analyze_extension_points"]
     B --> C[prepare_change<br/>signature + token]
-    C --> D["search_labels →<br/>create_label ×6"]
-    D --> E[generate_smart_table<br/>+ get_object_info table verify]
+    C --> D["labels(action=search) →<br/>labels(action=create) ×6"]
+    D --> E[generate_smart objectType=table<br/>+ get_object_info table verify]
     E --> F["resolve_references<br/>+ validate_xpp"]
     F --> G["create_d365fo_file<br/>(CoC class)"]
     G --> H[verify_d365fo_project ✅]
@@ -73,14 +73,14 @@ flowchart LR
     A[analyze_code_patterns<br/>+ search_extensions] --> B["batch_search<br/>framework classes + EDTs"]
     B --> C["generate_code<br/>pattern: sysoperation"]
     C --> D["get_object_info table + edt<br/>parameter types"]
-    D --> E["search_labels →<br/>create_label ×2"]
+    D --> E["labels(action=search) →<br/>labels(action=create) ×2"]
     E --> F["create_d365fo_file ×3<br/>Contract / Controller / Service"]
     F --> G[verify_d365fo_project ✅]
 ```
 
 **Key takeaways**
 - An existing `My*` DataContract from the same model is the best structural template — `search_extensions` finds it.
-- Exhaustive `search_labels` before `create_label` prevents duplicate label IDs across thousands of SYS labels.
+- Exhaustive `labels(action="search")` before `labels(action="create")` prevents duplicate label IDs across thousands of SYS labels.
 
 ---
 
@@ -96,7 +96,7 @@ then add the field to the General tab of the CustTable form.
 
 ```mermaid
 flowchart LR
-    A["search_labels →<br/>create_label"] --> B["create_d365fo_file<br/>(enum)"]
+    A["labels(action=search) →<br/>labels(action=create)"] --> B["create_d365fo_file<br/>(enum)"]
     B --> C["create_d365fo_file<br/>(table extension)"]
     C --> D["get_object_info form<br/>exact tab names"]
     D --> E["modify_d365fo_file<br/>add-control → TabGeneral"]
@@ -149,7 +149,7 @@ flowchart LR
     A["get_object_info table ×3<br/>journal + invent tables"] --> B["get_api_usage_patterns<br/>real call sequences"]
     B --> C["get_method_signature ×7<br/>exact parameter order"]
     C --> D["search_extensions<br/>existing My* service template"]
-    D --> E["create_label ×3 →<br/>create_d365fo_file"]
+    D --> E["labels(action=create) ×3 →<br/>create_d365fo_file"]
     E --> F[verify_d365fo_project ✅]
 ```
 
@@ -171,8 +171,8 @@ Include a Controller so we can attach a menu item.
 
 ```mermaid
 flowchart LR
-    A["get_object_info report<br/>study existing report"] --> B["search_labels →<br/>create_label ×3"]
-    B --> C["generate_smart_report<br/>5 objects in one call"]
+    A["get_object_info report<br/>study existing report"] --> B["labels(action=search) →<br/>labels(action=create) ×3"]
+    B --> C["generate_smart objectType=report<br/>5 objects in one call"]
     C --> D["create_d365fo_file ×5<br/>Tmp → Contract → DP → Controller → Report"]
     D --> E["get_object_info table<br/>InventSum + WHSZone"]
     E --> F["modify_d365fo_file<br/>processReport() body"]
@@ -180,7 +180,7 @@ flowchart LR
 ```
 
 **Key takeaways**
-- `generate_smart_report` replaces 15+ manual calls; creation order matters (TmpTable before DP for `tableStr` resolution).
+- `generate_smart(objectType="report")` replaces 15+ manual calls; creation order matters (TmpTable before DP for `tableStr` resolution).
 - `processReport()` is intentionally a TODO skeleton — query logic is added after studying the source tables, not guessed.
 - On a Windows VM the files are written directly; the per-file `create_d365fo_file` step is the Azure/Linux path.
 

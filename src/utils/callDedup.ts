@@ -15,7 +15,7 @@ export const DEDUP_MAX_ENTRIES = 200;
 /** Tools whose repeated identical calls are legitimate — never dedup, never loop-hint. */
 export const DEDUP_EXCLUDED_TOOLS = new Set([
   'create_d365fo_file', 'modify_d365fo_file', 'generate_d365fo_xml',
-  'create_label', 'rename_label', 'undo_last_modification',
+  'labels', 'undo_last_modification',
   'update_symbol_index', 'build_d365fo_project', 'trigger_db_sync',
   'run_bp_check', 'run_systest_class', 'review_workspace_changes',
   'verify_d365fo_project', 'get_workspace_info',

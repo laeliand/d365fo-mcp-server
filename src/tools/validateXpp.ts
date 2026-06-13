@@ -379,7 +379,7 @@ function checkHardcodedStrings(code: string): ValidationViolation[] {
         line: i + 1,
         excerpt: m[0].trim(),
         fix: 'Replace the hardcoded string with a label reference: info("@ModelName:LabelId"). ' +
-          'Call search_labels() to find an existing label, or create_label() if none exists. ' +
+          'Call labels(action="search") to find an existing label, or labels(action="create") if none exists. ' +
           'Hardcoded strings fail BPErrorLabelIsText.',
       });
     }
@@ -467,7 +467,7 @@ function checkMissingAlternateKey(code: string): ValidationViolation[] {
       fix: 'Add at least one <AxTableIndex> with <AlternateKey>Yes</AlternateKey>. ' +
         'D365FO requires every table to have an alternate key index ' +
         '(BPCheckAlternateKeyAbsent). ' +
-        'generate_smart_table adds this automatically via buildPrimaryKeyIndex.',
+        'generate_smart adds this automatically via buildPrimaryKeyIndex.',
     });
   }
   return violations;
@@ -575,7 +575,7 @@ function checkTableProperties(code: string, stats?: PropertyStatsProvider): Vali
       rule: 'XML002',
       severity: 'error',
       excerpt: '<AxTable> — missing <Label>',
-      fix: `Add <Label>@YourModel:TableLabel</Label> to the table header (create the label first via create_label). Evidence: ${label.evidence}.`,
+      fix: `Add <Label>@YourModel:TableLabel</Label> to the table header (create the label first via labels). Evidence: ${label.evidence}.`,
     });
   }
 
