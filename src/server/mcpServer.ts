@@ -19,6 +19,7 @@ import { SERVER_MODE, LOCAL_TOOLS, ALWAYS_TOOLS } from './serverMode.js';
 import { TOOL_ANNOTATIONS } from './toolAnnotations.js';
 import { getConfigManager } from '../utils/configManager.js';
 import { setLastRoots, recordRootsListChanged } from '../utils/stdioSessionInfo.js';
+import { OBJECT_INFO_TYPES, BATCH_INFO_TYPES } from '../tools/objectInfoRegistry.js';
 
 export type { XppServerContext };
 export { SERVER_MODE, LOCAL_TOOLS, WRITE_TOOLS } from './serverMode.js';
@@ -330,9 +331,7 @@ export function createXppMcpServer(context: XppServerContext): Server {
                     name: { type: 'string', description: 'Exact object name (use search first if unsure)' },
                     type: {
                       type: 'string',
-                      enum: ['class', 'table', 'form', 'query', 'view', 'enum', 'edt', 'report',
-                        'data-entity', 'menu-item', 'table-extension',
-                        'security-privilege', 'security-duty', 'security-role'],
+                      enum: [...BATCH_INFO_TYPES],
                       description: 'Object type — selects the underlying get_*_info tool',
                     },
                   },
@@ -846,14 +845,14 @@ Model from .mcp.json; prefix auto-applied from EXTENSION_PREFIX. Classes: member
         },
         {
           name: 'get_object_info',
-          description: 'Read one D365FO object\'s metadata. Pick the kind via objectType: class, table, form, query, view, enum, edt, report, data-entity, menu-item, service, map, config-key, security-policy, macro. Type-specific flags go in options, e.g. {"includeRdl":true} (report), {"searchControl":"General"} (form), {"compact":false} (class), {"filter":"Path"} (macro), {"mode":"hierarchy"} (edt). For CLASSES, {"members":"names"} (optional {"prefix":...}) returns a fast IntelliSense-style member-name list instead of full metadata. For 2+ objects use batch_get_info. Replaces the former get_<type>_info and code_completion tools.',
+          description: 'Read one D365FO object\'s metadata. Pick the kind via objectType: class, table, form, query, view, enum, edt, report, data-entity, menu-item, service, map, config-key, security-policy, macro. Extension types (table-extension, form-extension, enum-extension, edt-extension, data-entity-extension) list all extensions of a base object — pass the base object name or a full extension name (the dot suffix is stripped automatically). Type-specific flags go in options, e.g. {"includeRdl":true} (report), {"searchControl":"General"} (form), {"compact":false} (class), {"filter":"Path"} (macro), {"mode":"hierarchy"} (edt). For CLASSES, {"members":"names"} (optional {"prefix":...}) returns a fast IntelliSense-style member-name list instead of full metadata. For 2+ objects use batch_get_info. Replaces the former get_<type>_info and code_completion tools.',
           inputSchema: {
             type: 'object',
             properties: {
               objectType: {
                 type: 'string',
-                enum: ['class', 'table', 'form', 'query', 'view', 'enum', 'edt', 'report', 'data-entity', 'menu-item', 'service', 'map', 'config-key', 'security-policy', 'macro'],
-                description: 'Kind of object to read',
+                enum: [...OBJECT_INFO_TYPES],
+                description: 'Kind of object to read (incl. *-extension types — pass base object name or full extension name)',
               },
               name: {
                 type: 'string',

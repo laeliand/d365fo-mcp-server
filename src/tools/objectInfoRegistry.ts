@@ -27,7 +27,7 @@ import { getMapInfoTool } from './mapInfo.js';
 import { getConfigKeyInfoTool } from './configKeyInfo.js';
 import { getSecurityPolicyInfoTool } from './securityPolicyInfo.js';
 import { getMacroInfoTool } from './macroInfo.js';
-import { tableExtensionInfoTool, formExtensionInfoTool, enumExtensionInfoTool, edtExtensionInfoTool, dataEntityExtensionInfoTool } from './tableExtensionInfo.js';
+import { tableExtensionInfoTool, formExtensionInfoTool, enumExtensionInfoTool, edtExtensionInfoTool, dataEntityExtensionInfoTool, classExtensionInfoTool } from './tableExtensionInfo.js';
 import { securityArtifactInfoTool } from './securityArtifactInfo.js';
 
 export type InfoTool = (request: CallToolRequest, context: XppServerContext) => Promise<any>;
@@ -42,6 +42,13 @@ export interface ReaderDispatch {
 /** name + spread options; unknown option keys are stripped by each handler's zod schema. */
 const byName = (key: string): ReaderDispatch['buildArgs'] =>
   (name, options) => ({ [key]: name, ...(options ?? {}) });
+
+/**
+ * Like byName, but for extension lookups: accepts either the base object name or
+ * a full extension name and passes only the base name (dot suffix stripped) under `key`.
+ */
+const byBaseName = (key: string): ReaderDispatch['buildArgs'] =>
+  (name, options) => ({ [key]: name.includes('.') ? name.split('.')[0] : name, ...(options ?? {}) });
 
 export const READER_DISPATCH: Record<string, ReaderDispatch> = {
   'class':              { tool: classInfoTool,            toolName: 'get_class_info',             buildArgs: byName('className') },
@@ -59,12 +66,12 @@ export const READER_DISPATCH: Record<string, ReaderDispatch> = {
   'config-key':         { tool: getConfigKeyInfoTool,     toolName: 'get_config_key_info',        buildArgs: byName('name') },
   'security-policy':    { tool: getSecurityPolicyInfoTool,toolName: 'get_security_policy_info',   buildArgs: byName('policyName') },
   'macro':              { tool: getMacroInfoTool,         toolName: 'get_macro_info',             buildArgs: byName('macroName') },
-  'table-extension':         { tool: tableExtensionInfoTool,       toolName: 'get_table_extension_info',        buildArgs: (name, options) => ({ tableName: name.includes('.') ? name.split('.')[0] : name, ...(options ?? {}) }) },
-  'form-extension':          { tool: formExtensionInfoTool,        toolName: 'get_form_extension_info',         buildArgs: (name, options) => ({ baseName:   name.includes('.') ? name.split('.')[0] : name, ...(options ?? {}) }) },
-  'enum-extension':          { tool: enumExtensionInfoTool,        toolName: 'get_enum_extension_info',         buildArgs: (name, options) => ({ baseName:   name.includes('.') ? name.split('.')[0] : name, ...(options ?? {}) }) },
-  'edt-extension':           { tool: edtExtensionInfoTool,         toolName: 'get_edt_extension_info',          buildArgs: (name, options) => ({ baseName:   name.includes('.') ? name.split('.')[0] : name, ...(options ?? {}) }) },
-  'data-entity-extension':   { tool: dataEntityExtensionInfoTool,  toolName: 'get_data_entity_extension_info',  buildArgs: (name, options) => ({ baseName:   name.includes('.') ? name.split('.')[0] : name, ...(options ?? {}) }) },
-  'class-extension':         { tool: classInfoTool,                toolName: 'get_class_info',                  buildArgs: byName('className') },
+  'table-extension':         { tool: tableExtensionInfoTool,       toolName: 'get_table_extension_info',        buildArgs: byBaseName('tableName') },
+  'form-extension':          { tool: formExtensionInfoTool,        toolName: 'get_form_extension_info',         buildArgs: byBaseName('baseName') },
+  'enum-extension':          { tool: enumExtensionInfoTool,        toolName: 'get_enum_extension_info',         buildArgs: byBaseName('baseName') },
+  'edt-extension':           { tool: edtExtensionInfoTool,         toolName: 'get_edt_extension_info',          buildArgs: byBaseName('baseName') },
+  'data-entity-extension':   { tool: dataEntityExtensionInfoTool,  toolName: 'get_data_entity_extension_info',  buildArgs: byBaseName('baseName') },
+  'class-extension':         { tool: classExtensionInfoTool,       toolName: 'get_class_extension_info',         buildArgs: byBaseName('baseName') },
   'security-privilege': { tool: securityArtifactInfoTool, toolName: 'get_security_artifact_info', buildArgs: n => ({ name: n, artifactType: 'privilege' }) },
   'security-duty':      { tool: securityArtifactInfoTool, toolName: 'get_security_artifact_info', buildArgs: n => ({ name: n, artifactType: 'duty' }) },
   'security-role':      { tool: securityArtifactInfoTool, toolName: 'get_security_artifact_info', buildArgs: n => ({ name: n, artifactType: 'role' }) },

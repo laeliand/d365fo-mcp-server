@@ -222,7 +222,7 @@ const GenericExtArgsSchema = z.object({
 });
 
 function makeObjectExtensionTool(
-  extensionType: 'form-extension' | 'enum-extension' | 'edt-extension' | 'data-entity-extension',
+  extensionType: 'form-extension' | 'enum-extension' | 'edt-extension' | 'data-entity-extension' | 'class-extension',
   objectLabel: string,
 ) {
   return async function objectExtensionInfoTool(request: CallToolRequest, context: XppServerContext) {
@@ -317,3 +317,4 @@ export const formExtensionInfoTool       = makeObjectExtensionTool('form-extensi
 export const enumExtensionInfoTool       = makeObjectExtensionTool('enum-extension',        'Enum');
 export const edtExtensionInfoTool        = makeObjectExtensionTool('edt-extension',         'EDT');
 export const dataEntityExtensionInfoTool = makeObjectExtensionTool('data-entity-extension', 'DataEntity');
+export const classExtensionInfoTool      = makeObjectExtensionTool('class-extension',       'Class');
