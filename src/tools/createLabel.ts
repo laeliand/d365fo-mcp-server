@@ -219,11 +219,52 @@ function buildAxLabelFileXml(
   );
 }
 
+/**
+ * Normalize common parameter-name variants before validation.
+ * Some MCP clients guess the schema and send `labelFile` instead of `labelFileId`,
+ * or a scalar `value`/`text`/`label` instead of the `translations` array.
+ * This keeps those calls working while the canonical names stay the source of truth.
+ */
+function normalizeCreateLabelArgs(raw: unknown): Record<string, unknown> {
+  if (raw === null || typeof raw !== 'object') return {};
+  const args: Record<string, unknown> = { ...(raw as Record<string, unknown>) };
+
+  // labelFile / labelfile → labelFileId
+  if (args.labelFileId === undefined) {
+    const alias = args.labelFile ?? (args as any).labelfile ?? args.labelFileID;
+    if (typeof alias === 'string') args.labelFileId = alias;
+  }
+  delete args.labelFile;
+  delete (args as any).labelfile;
+  delete args.labelFileID;
+
+  // model defaults to labelFileId (they are typically identical)
+  if (args.model === undefined && typeof args.labelFileId === 'string') {
+    args.model = args.labelFileId;
+  }
+
+  // scalar value / text / label → translations: [{ language: 'en-US', text }]
+  if (args.translations === undefined) {
+    const scalar = args.value ?? args.text ?? args.label;
+    if (typeof scalar === 'string') {
+      const language = typeof args.language === 'string' ? args.language : 'en-US';
+      args.translations = [{ language, text: scalar }];
+    }
+  }
+  delete args.value;
+  delete args.text;
+  delete args.label;
+
+  return args;
+}
+
 // ── Tool implementation ───────────────────────────────────────────────────────
 
 export async function createLabelTool(request: CallToolRequest, context: XppServerContext) {
   try {
-    const args = CreateLabelArgsSchema.parse(request.params.arguments);
+    const args = CreateLabelArgsSchema.parse(
+      normalizeCreateLabelArgs(request.params.arguments),
+    );
     const {
       labelId,
       labelFileId,
