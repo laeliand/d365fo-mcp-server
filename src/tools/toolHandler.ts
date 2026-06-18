@@ -317,8 +317,12 @@ export function registerToolHandler(server: Server, context: XppServerContext): 
           }
         }
 
-        const { modelName, modelSource, isModelSourceAutoDetected, projectPath, projectSource, packagePath, packageSource } =
-          await configManager.getWorkspaceInfoDiagnostics();
+        const {
+          modelName, modelSource, isModelSourceAutoDetected,
+          projectPath, projectSource,
+          packagePath, packageSource,
+          customPackagesPath, customPackagesSource,
+        } = await configManager.getWorkspaceInfoDiagnostics();
         const envType = await configManager.getDevEnvironmentType();
         const frameworkDirectory = await configManager.getMicrosoftPackagesPath();
 
@@ -353,12 +357,22 @@ export function registerToolHandler(server: Server, context: XppServerContext): 
           ? !isCustomModel(modelName) && !isPlaceholder && isAutoDetectedSource
           : false;
 
+        // Determine the effective custom write root for display and freshness check.
+        // Precedence: D365FO_CUSTOM_PACKAGES_PATH > D365FO_PACKAGE_PATH (read-only MS root).
+        const effectiveWritePath = customPackagesPath ?? packagePath;
+        const effectiveWriteSource = customPackagesPath ? customPackagesSource : packageSource;
+
+        // The MS framework path shown in diagnostics: prefer the explicit
+        // D365FO_MICROSOFT_PACKAGES_PATH; fall back to the bridge frameworkDirectory;
+        // in a single-root traditional setup neither is set so omit the line.
+        const msFrameworkPath = frameworkDirectory ?? (!customPackagesPath ? null : packagePath);
+
         const lines: string[] = [
           `## D365FO Workspace Configuration`,
           ``,
           `Model name      : ${modelName ?? '(not configured)'}  (source: ${modelSource})`,
-          `Package path    : ${packagePath ?? '(not configured)'}  (custom metadata, source: ${packageSource})`,
-          `Framework dir   : ${frameworkDirectory ?? '(not applicable — single-root setup)'}  (Microsoft metadata, read-only)`,
+          `Custom write path: ${effectiveWritePath ?? '(not configured)'}  (custom metadata, source: ${effectiveWriteSource})`,
+          `Framework dir   : ${msFrameworkPath ?? '(not applicable — single-root setup)'}  (Microsoft metadata, read-only)`,
           `Project path    : ${projectPath ?? '(not detected)'}  (source: ${projectSource})`,
           `Env type        : ${envType}`,
           ``,
@@ -479,8 +493,8 @@ export function registerToolHandler(server: Server, context: XppServerContext): 
         // -----------------------------------------------------------------------
         try {
           const lastIndexedAt = context.symbolIndex.getLastIndexedAt?.() ?? null;
-          const modelMetadataDir = packagePath && modelName
-            ? nodePath.join(packagePath, modelName)
+          const modelMetadataDir = effectiveWritePath && modelName
+            ? nodePath.join(effectiveWritePath, modelName)
             : null;
           const staleness = checkIndexStaleness(lastIndexedAt, modelMetadataDir);
           lines.push('', ...staleness.lines);

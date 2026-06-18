@@ -1249,7 +1249,29 @@ export async function findD365FileOnDisk(
   const configPackagePath =
     configManager.getPackagePath() || fallbackPackagePath();
 
-  // Traditional mode: package name == model name (most common case)
+  // Resolve the custom write root (D365FO_CUSTOM_PACKAGES_PATH).
+  // Try this before the MS PLD so we find repo-tracked objects first.
+  const customWritePath = await configManager.getCustomPackagesPath();
+
+  // Candidate 1: custom write root, package == model (most common for custom models)
+  if (customWritePath) {
+    const customCandidatePath = path.join(
+      customWritePath,
+      resolvedModel,
+      resolvedModel,
+      objectFolder,
+      `${objectName}.xml`
+    );
+    try {
+      await fs.access(customCandidatePath);
+      console.error(`[modifyD365File] Found via custom packages path: ${customCandidatePath}`);
+      return customCandidatePath;
+    } catch {
+      // Not at custom path; continue
+    }
+  }
+
+  // Candidate 2: MS PLD / configured packagePath, package == model (traditional fallback)
   const candidatePath = path.join(
     configPackagePath,
     resolvedModel,
@@ -1263,37 +1285,35 @@ export async function findD365FileOnDisk(
     console.error(`[modifyD365File] Found via filesystem fallback: ${candidatePath}`);
     return candidatePath;
   } catch {
-    // Not at the default package==model path; try UDE layout
+    // Not at the default package==model path; try PackageResolver (UDE or custom layout)
   }
 
-  // UDE mode: package name may differ from model name — use PackageResolver
+  // Candidate 3: PackageResolver scan — handles package != model layouts in both UDE
+  // and traditional setups with a custom root
   try {
     const envType = await configManager.getDevEnvironmentType();
-    if (envType === 'ude') {
-      const customPath = await configManager.getCustomPackagesPath();
-      const msPath = await configManager.getMicrosoftPackagesPath();
-      const roots = [customPath, msPath].filter(Boolean) as string[];
-      const resolver = new PackageResolver(roots);
-      const resolved = await resolver.resolve(resolvedModel);
-      if (resolved) {
-        const udePath = path.join(
-          resolved.rootPath,
-          resolved.packageName,
-          resolvedModel,
-          objectFolder,
-          `${objectName}.xml`
-        );
-        try {
-          await fs.access(udePath);
-          console.error(`[modifyD365File] Found via UDE filesystem fallback: ${udePath}`);
-          return udePath;
-        } catch {
-          // Not found at UDE path either
-        }
+    const msPath = envType === 'ude' ? await configManager.getMicrosoftPackagesPath() : null;
+    const roots = [customWritePath, msPath, configPackagePath].filter(Boolean) as string[];
+    const resolver = new PackageResolver(roots);
+    const resolved = await resolver.resolve(resolvedModel);
+    if (resolved) {
+      const resolvedPath = path.join(
+        resolved.rootPath,
+        resolved.packageName,
+        resolvedModel,
+        objectFolder,
+        `${objectName}.xml`
+      );
+      try {
+        await fs.access(resolvedPath);
+        console.error(`[modifyD365File] Found via PackageResolver: ${resolvedPath}`);
+        return resolvedPath;
+      } catch {
+        // Not found at resolved path either
       }
     }
   } catch {
-    // UDE resolution failed — skip silently
+    // PackageResolver failed — skip silently
   }
 
   return null;

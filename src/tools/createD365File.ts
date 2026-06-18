@@ -3689,20 +3689,20 @@ export async function handleCreateD365File(
     let basePath: string;
     let resolvedPackageName: string;
 
+    // Resolve the custom write root (D365FO_CUSTOM_PACKAGES_PATH).
+    // Applies in both UDE and traditional mode — it always points to the repo
+    // working tree where custom model XML lives, regardless of dev env type.
+    const customWritePath = await configManager.getCustomPackagesPath();
+
     if (args.packageName) {
       // Explicit packageName always wins, regardless of environment type
       resolvedPackageName = args.packageName;
-      if (envType === 'ude') {
-        const customPath = await configManager.getCustomPackagesPath();
-        basePath = customPath || args.packagePath || configPackagePath || fallbackPackagePath();
-      } else {
-        basePath = args.packagePath || configPackagePath || fallbackPackagePath();
-      }
+      // Custom write root beats the MS PLD for explicit packageName calls too.
+      basePath = args.packagePath || customWritePath || configPackagePath || fallbackPackagePath();
     } else if (envType === 'ude') {
-      // UDE mode: auto-resolve package name via descriptor scan
-      const customPath = await configManager.getCustomPackagesPath();
+      // UDE mode: auto-resolve package name via descriptor scan across both roots
       const msPath = await configManager.getMicrosoftPackagesPath();
-      const roots = [customPath, msPath].filter(Boolean) as string[];
+      const roots = [customWritePath, msPath].filter(Boolean) as string[];
 
       const resolver = new PackageResolver(roots);
       const resolved = await resolver.resolve(actualModelName);
@@ -3713,19 +3713,22 @@ export async function handleCreateD365File(
       } else {
         // Fallback: assume package == model (common case)
         resolvedPackageName = actualModelName;
-        basePath = customPath || args.packagePath || configPackagePath || fallbackPackagePath();
+        basePath = customWritePath || args.packagePath || configPackagePath || fallbackPackagePath();
       }
     } else {
-      // Traditional mode without explicit packageName: assume package == model
+      // Traditional mode: assume package == model.
+      // Prefer the custom write root over D365FO_PACKAGE_PATH so custom model
+      // XML lands in the repo working tree rather than the MS PackagesLocalDirectory.
       resolvedPackageName = actualModelName;
       basePath =
         args.packagePath ||
+        customWritePath ||
         configPackagePath ||
         fallbackPackagePath();
     }
 
     console.error(
-      `[create_d365fo_file] Environment: ${envType}, Package: ${resolvedPackageName}, Model: ${actualModelName}`,
+      `[create_d365fo_file] Environment: ${envType}, Package: ${resolvedPackageName}, Model: ${actualModelName}, BasePath: ${basePath}`,
     );
 
     const modelPath = path.join(

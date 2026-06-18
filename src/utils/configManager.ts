@@ -916,6 +916,8 @@ class ConfigManager {
     projectSource: string;
     packagePath: string | null;
     packageSource: string;
+    customPackagesPath: string | null;
+    customPackagesSource: string;
   }> {
     // Ensure config is loaded and auto-detection has had a chance to run
     await this.ensureLoaded();
@@ -961,13 +963,23 @@ class ConfigManager {
       projectSource = 'auto-detected from .rnrproj';
     }
 
-    // Package path
+    // Package path (MS framework / standard packages — read-only reference root)
     const packagePath = this.getPackagePath();
     let packageSource = '(not configured)';
 
     const context = this.getContext();
+    const fileContext = this.config?.context || this.config?.servers?.context || null;
+
     if (context?.packagePath) {
-      packageSource = '.mcp.json';
+      // getContext() merges env vars with higher priority than .mcp.json.
+      // Report the actual source so diagnostics don't mislead the developer.
+      if (process.env.D365FO_PACKAGE_PATH?.trim()) {
+        packageSource = 'D365FO_PACKAGE_PATH env var';
+      } else if (fileContext?.packagePath) {
+        packageSource = '.mcp.json';
+      } else {
+        packageSource = 'env var';
+      }
     } else if (context?.workspacePath && /PackagesLocalDirectory/i.test(context.workspacePath)) {
       packageSource = 'workspacePath';
     } else if (this.autoDetectedProject?.packagePath) {
@@ -976,8 +988,28 @@ class ConfigManager {
       packageSource = 'well-known path probe';
     }
 
+    // Custom write path (D365FO_CUSTOM_PACKAGES_PATH / customPackagesPath in context)
+    // — this is the repo working tree where custom model XML is written and tracked by git.
+    const customPackagesPath = await this.getCustomPackagesPath();
+    let customPackagesSource = '(not configured)';
+
+    if (customPackagesPath) {
+      if (process.env.D365FO_CUSTOM_PACKAGES_PATH?.trim()) {
+        customPackagesSource = 'D365FO_CUSTOM_PACKAGES_PATH env var';
+      } else if (fileContext?.customPackagesPath) {
+        customPackagesSource = '.mcp.json';
+      } else {
+        customPackagesSource = 'XPP config auto-detection';
+      }
+    }
+
     const isModelSourceAutoDetected = modelSource.includes('auto-detected');
-    return { modelName, modelSource, isModelSourceAutoDetected, projectPath, projectSource, packagePath, packageSource };
+    return {
+      modelName, modelSource, isModelSourceAutoDetected,
+      projectPath, projectSource,
+      packagePath, packageSource,
+      customPackagesPath, customPackagesSource,
+    };
   }
 
   /**
