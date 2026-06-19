@@ -38,12 +38,15 @@ One path, three derived values — plus automatic `.rnrproj` discovery:
 |---|---------------------------|------------------------------|
 | Config key | `command` + `args` + `env` | `url` |
 | Started by | the MCP client (VS / Claude), no port | you / Azure |
+| Process / memory | one process **per client** — each loads its own copy of the symbol index (~1.5 GB) | one shared process — index loaded **once** for all connected clients |
 | Workspace context | full (`env` block) | headers only — limited |
 | Auth | n/a | optional `headers: { "X-Api-Key": "..." }` |
 
 > stdio note: `DB_PATH`/`LABELS_DB_PATH` must be **absolute** — the working directory is controlled by the client, not the repo.
 >
 > HTTP note: `D365FO_WORKSPACE_PATH` cannot be passed (no subprocess). For reliable model targeting combine HTTP search with a stdio write-only companion ([hybrid](#hybrid-mode-summary)).
+>
+> Multiple clients note: if several clients (e.g. VS Code + the CLI) talk to the **same** code base at once, prefer one local HTTP instance ([Scenario C](SETUP.md#scenario-c--local-http)). stdio spawns a separate subprocess per client, so each one loads its own ~1.5 GB index; a single HTTP instance loads it once and serves them all.
 
 ---
 
