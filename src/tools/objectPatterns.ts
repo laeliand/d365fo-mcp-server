@@ -24,8 +24,7 @@ export async function objectPatternsTool(request: CallToolRequest, context: XppS
   const a = (request.params.arguments ?? {}) as Record<string, any>;
   let domain = a.domain as string | undefined;
 
-  // Infer the discriminator when omitted — models routinely pass only a
-  // form/table-specific param (e.g. pattern, action, recommend, tableGroup).
+  // Infer the discriminator from form/table-specific params when omitted.
   if (domain !== 'table' && domain !== 'form') {
     const formSignals = ['action', 'pattern', 'recommend', 'formPattern', 'similarTo', 'dataSource', 'xml', 'formName'];
     const tableSignals = ['tableGroup'];
@@ -41,8 +40,7 @@ export async function objectPatternsTool(request: CallToolRequest, context: XppS
   }
 
   if (domain === 'form') {
-    // formPatternTool requires `action`. Infer it when omitted from the params
-    // present: pattern → spec; xml/formName/filePath → validate; otherwise analyze.
+    // formPatternTool requires `action`; infer it when omitted.
     let action = a.action as string | undefined;
     if (!action) {
       if (a.pattern !== undefined) action = 'spec';

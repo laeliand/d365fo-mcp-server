@@ -389,11 +389,8 @@ export async function handleGenerateSmartForm(
       gridFields,
     });
 
-    // Template PatternVersions are hardcoded (e.g. 1.1) and can lag behind the
-    // target environment, which then rejects the form in BP with a
-    // BPFrameworkFatalException ("unknown PatternVersion"). Align the Design-level
-    // PatternVersion with the version this environment actually uses for the
-    // pattern (mined from real forms). Sub-pattern versions are left untouched.
+    // Align the Design-level PatternVersion with the version this environment uses
+    // for the pattern; template defaults can lag and be rejected by BP.
     const designPattern = xml.match(/<Pattern xmlns="">([^<]+)<\/Pattern>/)?.[1];
     if (designPattern) {
       const envVersion = resolveEnvPatternVersion(symbolIndex.getReadDb(), designPattern);
@@ -451,10 +448,8 @@ export async function handleGenerateSmartForm(
       errorList.split('\n').map(l => `      ${l}`).join('\n');
   }
 
-  // Datasource table existence check: a datasource bound to a table that does not
-  // exist (e.g. a wrongly pluralized "…Lines" instead of "…Line") produces a form
-  // that cannot build. Warn — with the closest existing table name — rather than
-  // emitting a silently-broken form.
+  // Warn when a datasource is bound to a table that does not exist in the index,
+  // suggesting the closest real table name.
   try {
     const db = symbolIndex.getReadDb();
     const tableExists = db.prepare(
@@ -466,7 +461,6 @@ export async function handleGenerateSmartForm(
       if (!table || seenTables.has(table.toLowerCase())) continue;
       seenTables.add(table.toLowerCase());
       if (tableExists.get(table)) continue;
-      // Suggest the closest real table: try the de-pluralized stem as a prefix.
       const stem = table.replace(/s$/i, '');
       const alt = db.prepare(
         `SELECT name FROM symbols WHERE type = 'table' AND name LIKE ? COLLATE NOCASE ORDER BY LENGTH(name) ASC LIMIT 1`,
@@ -612,10 +606,8 @@ export async function handleGenerateSmartForm(
 }
 
 /**
- * Resolve the PatternVersion this environment actually uses for a Design-level
- * form pattern, from mined form_patterns data (the most common version among real
- * forms). Returns null when no mined data is available (older index) so the caller
- * keeps the template default. Exported for testing.
+ * The most common Design-level PatternVersion this environment uses for a form
+ * pattern, from mined form_patterns data. Returns null when no mined data exists.
  */
 export function resolveEnvPatternVersion(db: any, patternXmlName: string): string | null {
   try {
@@ -629,7 +621,7 @@ export function resolveEnvPatternVersion(db: any, patternXmlName: string): strin
     `).get(patternXmlName) as { pattern_version: string } | undefined;
     return row?.pattern_version ?? null;
   } catch {
-    return null; // index predates form_patterns mining — keep the template version
+    return null;
   }
 }
 

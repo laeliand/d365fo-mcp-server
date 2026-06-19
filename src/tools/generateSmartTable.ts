@@ -267,9 +267,7 @@ export async function handleGenerateSmartTable(
   }
 
   // Strategy 2: Generate common fields based on table group patterns.
-  // Skip when the caller provided explicit fieldsHint — they have stated exactly
-  // which fields the table needs, so mining "commonly co-occurring" fields only
-  // injects unrelated infrastructure (e.g. MCRHoldCode) they then have to remove.
+  // Skipped when explicit fieldsHint is given (the caller stated the fields).
   if (generateCommonFields && !copyFrom && !fieldsHint) {
     console.log(`[generateSmartTable] Analyzing patterns for table group: ${tableGroup}`);
     try {
@@ -311,9 +309,7 @@ export async function handleGenerateSmartTable(
           }
         }
 
-        // Add fields appearing in 30%+ of sample tables, excluding cross-cutting
-        // infrastructure fields that pollute most standard tables but rarely belong
-        // on a fresh custom table (the user did not ask for them).
+        // Add fields appearing in 30%+ of sample tables, excluding infrastructure fields.
         const threshold = Math.max(1, Math.floor(sampleTables.length * 0.3));
         const commonFields = Array.from(fieldFrequency.entries())
           .filter(([key, data]) => data.count >= threshold && !isInfrastructureField(key.split(':')[0]))
@@ -347,7 +343,6 @@ export async function handleGenerateSmartTable(
         continue;
       }
 
-      // Prefer a real EDT from the indexed environment over a generic name guess.
       const edt = resolveBestEdt(hint, hintDb);
       const hintLower = hint.toLowerCase();
       // Mark as mandatory only when the field name IS an identifier (ends with 'Id',
@@ -1046,11 +1041,7 @@ function validateEdtExists(edtName: string, db: any): boolean {
 /**
  * Suggest EDT based on field name heuristics
  */
-/**
- * Cross-cutting infrastructure fields that appear on a large share of standard
- * tables (module framework hooks, audit columns, etc.) but should never be
- * auto-injected onto a fresh custom table from frequency mining.
- */
+/** Framework/audit fields that should never be auto-injected from frequency mining. */
 export function isInfrastructureField(fieldName: string): boolean {
   const INFRA = new Set([
     'mcrholdcode', 'mcrholduserid', 'mcrholddatetime',
@@ -1062,11 +1053,7 @@ export function isInfrastructureField(fieldName: string): boolean {
   return INFRA.has(fieldName.toLowerCase());
 }
 
-/**
- * Confidence that an EDT name corresponds to a field name, by containment.
- * 1.0 = identical; high when one fully contains the other (e.g. field
- * "RentEquipmentId" ⊂ EDT "AslRentEquipmentId" — a model-prefixed custom EDT).
- */
+/** Confidence (0–1) that an EDT name matches a field name, by containment. */
 function edtNameConfidence(field: string, edt: string): number {
   const f = field.toLowerCase();
   const e = edt.toLowerCase();
@@ -1077,13 +1064,9 @@ function edtNameConfidence(field: string, edt: string): number {
 }
 
 /**
- * Resolve the best EDT for a field name, preferring REAL EDTs from the indexed
- * environment over generic name heuristics. This is what makes the scaffold pick
- * a project's own EDT (e.g. AslRentEquipmentId) instead of a generic guess
- * (RefRecId) that is the wrong base type.
- *
- * Order: exact EDT-name match → strong fuzzy match (≥0.8) → name heuristic that
- * actually exists in this environment → weaker fuzzy match (≥0.6) → raw heuristic.
+ * Resolve the best EDT for a field name, preferring real indexed EDTs over name
+ * heuristics. Order: exact EDT-name match → strong fuzzy match (≥0.8) → heuristic
+ * that exists in this environment → weaker fuzzy match (≥0.6) → raw heuristic.
  */
 export function resolveBestEdt(fieldName: string, db: any): string {
   try {
@@ -1129,9 +1112,7 @@ export function suggestEdtFromFieldName(fieldName: string): string {
   if (nameLower.includes('rate')) return 'AmountMST';
   if (nameLower.includes('quantity') || nameLower.includes('qty')) return 'Qty';
   if (nameLower.includes('price')) return 'PriceUnit';
-  // ValidFrom / ValidTo — D365FO datetime effectivity pattern (UtcDateTime EDTs).
-  // Only the bare effectivity names map to the *DateTime EDTs; any other field
-  // whose name ends in "date" is a calendar Date → TransDate.
+  // Only the bare effectivity names map to the *DateTime EDTs; other "*date" → TransDate.
   if (nameLower === 'validfrom') return 'ValidFromDateTime';
   if (nameLower === 'validto') return 'ValidToDateTime';
   if (nameLower.includes('datetime') || nameLower.includes('time')) return 'TransDateTime';
@@ -1143,11 +1124,9 @@ export function suggestEdtFromFieldName(fieldName: string): string {
   if (nameLower.includes('percent') || nameLower.includes('pct')) return 'Percent';
   if (nameLower.includes('enabled') || nameLower.includes('active') || nameLower.includes('flag')) return 'NoYesId';
 
-  // NOTE: deliberately NO blanket "*id → RefRecId" or "status → NoYesId" rule.
-  // RefRecId (int64) is the wrong base type for the common string business key
-  // (e.g. RentEquipmentId), and "status" is usually a domain enum, not a boolean.
-  // Such fields fall through to a string default unless a real EDT matches via
-  // resolveBestEdt — far less wrong than forcing the field to the wrong type.
+  // No blanket "*id → RefRecId" / "status → NoYesId" rule: those force the wrong
+  // base type. Such fields fall through to the string default unless resolveBestEdt
+  // matches a real EDT.
 
   // Default to string
   return 'String255';

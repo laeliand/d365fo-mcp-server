@@ -968,9 +968,6 @@ const BRIDGE_MODIFY_TYPES = new Set([
   'form', 'query', 'view',
   'class-extension', 'table-extension', 'form-extension', 'enum-extension',
   'menu-item-action', 'menu-item-display', 'menu-item-output',
-  // 'menu' is the only object type add-menu-item-to-menu targets — the C# bridge
-  // (RequestDispatcher → MetadataWriteService.AddMenuItemToMenu) loads the AxMenu
-  // by name and updates it. Without this the operation is rejected before dispatch.
   'menu',
 ]);
 

@@ -19,8 +19,6 @@ export type KnowledgeKind = (typeof KNOWLEDGE_KINDS)[number];
 
 const GetKnowledgeArgsSchema = z
   .object({
-    // kind is the discriminator but optional — models routinely omit it and pass
-    // only topic/errorText. We infer it below rather than rejecting the call.
     kind: z.enum(KNOWLEDGE_KINDS).optional().describe(
       'knowledge → look up an X++ topic/rule; error → diagnose a compiler/runtime error message. ' +
       'Optional — inferred from errorText (→ error) or topic (→ knowledge) when omitted.',
@@ -42,8 +40,6 @@ export async function getKnowledgeTool(request: CallToolRequest) {
   }
 
   const { kind: explicitKind, ...rest } = parsed.data;
-  // Infer the discriminator when omitted: errorText/errorCode imply error
-  // diagnosis; anything else (topic, or a bare list-all call) is a knowledge lookup.
   const kind: KnowledgeKind =
     explicitKind ?? ((rest as any).errorText || (rest as any).errorCode ? 'error' : 'knowledge');
   if (kind === 'error') {
