@@ -503,13 +503,18 @@ export const D365FO_FILE_OP_SPECS: Record<string, D365FileOpSpec> = {
       'Adds OR updates in place when the method name exists (position preserved). methodName is derived ' +
       'from the source signature when omitted. sourceCode may carry several methods at once.',
   },
-  'remove-method': { required: ['methodName'], optional: [] },
+  'remove-method': {
+    required: ['methodName'],
+    optional: [],
+    note: 'class/table/form/query/view + their *-extension variants, and objectType="data-entity" (SourceCode.Methods).',
+  },
   'replace-code': {
     required: ['oldCode', 'newCode'],
     optional: ['methodName'],
     note:
       'Surgical oldCode→newCode replacement — NOT sourceCode/methodCode. Preferred for rewriting a known ' +
-      'method. Form control overrides: methodName="ControlName.methodName".',
+      'method. Form control overrides: methodName="ControlName.methodName". ' +
+      'class/table/form/query/view + their *-extension variants, and objectType="data-entity" (SourceCode.Methods).',
   },
   'add-field': {
     required: ['fieldName'],
@@ -541,17 +546,22 @@ export const D365FO_FILE_OP_SPECS: Record<string, D365FileOpSpec> = {
     required: ['fieldName'],
     optional: ['fieldType', 'fieldMandatory', 'fieldLabel', 'fieldHelpText', 'fieldEnumType', 'fieldStringSize'],
     mutationOneOf: ['fieldType', 'fieldMandatory', 'fieldLabel', 'fieldHelpText', 'fieldEnumType', 'fieldStringSize'],
+    note: 'Table and table-extension only — a plain data-entity field is a different XML element family (AxDataEntityViewMappedField/UnmappedField*, not AxTableField) with no property-patch path yet. To change a data-entity field, remove-field + add-field.',
   },
   'rename-field': {
     required: ['fieldName', 'fieldNewName'],
     optional: [],
-    note: 'Also fixes index DataField refs and TitleField1/2.',
+    note: 'Also fixes index DataField refs and TitleField1/2. Table and table-extension only — not yet supported on a plain data-entity (AxDataEntityViewField, not AxTableField). To rename a data-entity field, remove-field + add-field under the new name.',
   },
-  'remove-field': { required: ['fieldName'], optional: [] },
+  'remove-field': {
+    required: ['fieldName'],
+    optional: [],
+    note: 'Table, table-extension, and objectType="data-entity" (removes either a mapped or an unmapped AxDataEntityViewField by name).',
+  },
   'replace-all-fields': {
     required: ['fields'],
     optional: [],
-    note: 'Atomic rewrite of ALL fields (corrupted field names).',
+    note: 'Atomic rewrite of ALL fields (corrupted field names). Table and table-extension only — not yet supported on a plain data-entity.',
   },
   'add-display-method': {
     required: ['methodName', 'sourceCode'],
@@ -587,8 +597,13 @@ export const D365FO_FILE_OP_SPECS: Record<string, D365FileOpSpec> = {
   'add-relation': {
     required: ['relationName', 'relatedTable'],
     optional: ['relationConstraints', 'relationCardinality', 'relatedTableCardinality', 'relationshipType'],
+    note: 'Table and table-extension only. AxDataEntityView carries an empty <Relations> element in every generated/shipped entity observed — not a real write target, so this was left table-only rather than guessed at.',
   },
-  'remove-relation': { required: ['relationName'], optional: [] },
+  'remove-relation': {
+    required: ['relationName'],
+    optional: [],
+    note: 'Table and table-extension only — see add-relation.',
+  },
   'add-delete-action': {
     required: ['deleteActionName'],
     optional: ['deleteActionTable', 'deleteActionType'],
@@ -598,8 +613,13 @@ export const D365FO_FILE_OP_SPECS: Record<string, D365FileOpSpec> = {
   'add-field-group': {
     required: ['fieldGroupName'],
     optional: ['fieldGroupFields', 'fieldGroupLabel'],
+    note: 'Table, table-extension, and objectType="data-entity" (its own <FieldGroups>, same element type as a table\'s).',
   },
-  'remove-field-group': { required: ['fieldGroupName'], optional: [] },
+  'remove-field-group': {
+    required: ['fieldGroupName'],
+    optional: [],
+    note: 'Table, table-extension, and objectType="data-entity".',
+  },
   'add-field-to-field-group': {
     required: ['fieldGroupName', 'fieldName'],
     optional: ['extendBaseFieldGroup', 'autoCorrect'],
@@ -609,7 +629,9 @@ export const D365FO_FILE_OP_SPECS: Record<string, D365FileOpSpec> = {
       'it up front, or autoCorrect=false to have the mismatch error instead. ' +
       'fieldName follows the prefix add-field applied: send both in one operations[] and the bare name is ' +
       'retargeted at the prefixed field (reported as a Note), unless the base table declares a field of ' +
-      'that name too — then it is taken as naming the base-table field.',
+      'that name too — then it is taken as naming the base-table field. ' +
+      'objectType="data-entity" (a plain entity) is also supported: it owns its field groups directly, ' +
+      'like a table — extendBaseFieldGroup does not apply and is rejected if passed.',
   },
   'add-field-modification': {
     required: ['fieldName'],

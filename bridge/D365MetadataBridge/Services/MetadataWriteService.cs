@@ -2207,6 +2207,23 @@ namespace D365MetadataBridge.Services
                     ((IMetaTableExtensionProvider)_provider.TableExtensions).Update(obj, msi);
                     return new { success = true, operation = "replace-code", objectType, objectName, methodName, api = "Update" };
                 }
+                // A plain data-entity's SourceCode.Methods — same collection AddMethod's
+                // "data-entity" case writes to (a postLoad override or a
+                // ComputedFieldMethod body). ReplaceCode never had this case at all: it is
+                // dispatched by objectType, not by name resolution, so this is a genuinely
+                // missing branch rather than the Tables/TableExtensions-only gap the field
+                // operations above had.
+                case "data-entity":
+                {
+                    var obj = _provider.DataEntityViews.Read(objectName)
+                        ?? throw new ArgumentException($"Data entity '{objectName}' not found");
+                    var msi = GetModelSaveInfoForObject(_provider.DataEntityViews, objectName);
+                    var replaced = ReplaceInMethods(obj, methodName, oldCode, newCode);
+                    if (!replaced)
+                        throw new InvalidOperationException($"oldCode not found in {objectName}" + (methodName != null ? $".{methodName}" : ""));
+                    ((IMetaDataEntityViewProvider)_provider.DataEntityViews).Update(obj, msi);
+                    return new { success = true, operation = "replace-code", objectType, objectName, methodName, api = "Update" };
+                }
                 default:
                     throw new ArgumentException($"replace-code not supported for objectType '{objectType}' via bridge");
             }
@@ -2303,6 +2320,18 @@ namespace D365MetadataBridge.Services
                         throw new InvalidOperationException($"Method '{methodName}' not found on table extension '{objectName}'");
                     ((IMetaTableExtensionProvider)_provider.TableExtensions).Update(obj, msi);
                     return new { success = true, operation = "remove-method", objectType, objectName, methodName, api = "IMetaTableExtensionProvider.Update" };
+                }
+                // Same gap as ReplaceCode above — remove-method is objectType-dispatched and
+                // simply never had a "data-entity" branch, unlike add-method which does.
+                case "data-entity":
+                {
+                    var obj = _provider.DataEntityViews.Read(objectName)
+                        ?? throw new ArgumentException($"Data entity '{objectName}' not found");
+                    var msi = GetModelSaveInfoForObject(_provider.DataEntityViews, objectName);
+                    if (!RemoveMethodByName(obj, methodName))
+                        throw new InvalidOperationException($"Method '{methodName}' not found on data-entity '{objectName}'");
+                    ((IMetaDataEntityViewProvider)_provider.DataEntityViews).Update(obj, msi);
+                    return new { success = true, operation = "remove-method", objectType, objectName, methodName, api = "IMetaDataEntityViewProvider.Update" };
                 }
                 default:
                     throw new ArgumentException($"remove-method not supported for objectType '{objectType}' via bridge");
@@ -2859,10 +2888,21 @@ namespace D365MetadataBridge.Services
                 return new { success = true, operation = "add-field-group", objectName = tableName, groupName, fieldCount = fields?.Count ?? 0, api = "IMetaTableExtensionProvider.Update" };
             }
 
-            throw new ArgumentException($"Table or table-extension '{tableName}' not found");
+            // A plain data-entity has its own <FieldGroups> (AxTableFieldGroup, same element
+            // type as a table's) — same "Tables/TableExtensions only" gap remove-field had.
+            var axEntity = _provider.DataEntityViews.Read(tableName);
+            if (axEntity != null)
+            {
+                var msi = GetModelSaveInfoForObject(_provider.DataEntityViews, tableName);
+                axEntity.FieldGroups.Add(axFg);
+                ((IMetaDataEntityViewProvider)_provider.DataEntityViews).Update(axEntity, msi);
+                return new { success = true, operation = "add-field-group", objectType = "data-entity", objectName = tableName, groupName, fieldCount = fields?.Count ?? 0, api = "IMetaDataEntityViewProvider.Update" };
+            }
+
+            throw new ArgumentException($"Table, table-extension, or data-entity '{tableName}' not found");
         }
 
-        /// <summary>Removes a field group from a table or table-extension.</summary>
+        /// <summary>Removes a field group from a table, table-extension, or plain data-entity.</summary>
         public object RemoveFieldGroup(string tableName, string groupName)
         {
             var axTable = _provider.Tables.Read(tableName);
@@ -2912,7 +2952,24 @@ namespace D365MetadataBridge.Services
                 return new { success = true, operation = "remove-field-group", objectName = tableName, groupName, api = "IMetaTableExtensionProvider.Update" };
             }
 
-            throw new ArgumentException($"Table or table-extension '{tableName}' not found");
+            var axEntity = _provider.DataEntityViews.Read(tableName);
+            if (axEntity != null)
+            {
+                var msi = GetModelSaveInfoForObject(_provider.DataEntityViews, tableName);
+                AxTableFieldGroup? toRemove = null;
+                foreach (AxTableFieldGroup fg in axEntity.FieldGroups)
+                {
+                    if (string.Equals(fg.Name, groupName, StringComparison.OrdinalIgnoreCase))
+                    { toRemove = fg; break; }
+                }
+                if (toRemove == null)
+                    throw new InvalidOperationException($"Field group '{groupName}' not found on data-entity '{tableName}'");
+                axEntity.FieldGroups.Remove(toRemove);
+                ((IMetaDataEntityViewProvider)_provider.DataEntityViews).Update(axEntity, msi);
+                return new { success = true, operation = "remove-field-group", objectType = "data-entity", objectName = tableName, groupName, api = "IMetaDataEntityViewProvider.Update" };
+            }
+
+            throw new ArgumentException($"Table, table-extension, or data-entity '{tableName}' not found");
         }
 
         /// <summary>
@@ -3004,7 +3061,31 @@ namespace D365MetadataBridge.Services
                 return new { success = true, operation = "add-field-to-field-group", objectName = tableName, groupName, fieldName, extendBaseFieldGroup = false, api = "IMetaTableExtensionProvider.Update" };
             }
 
-            throw new ArgumentException($"Table or table-extension '{tableName}' not found");
+            var axEntity = _provider.DataEntityViews.Read(tableName);
+            if (axEntity != null)
+            {
+                // A plain data-entity owns its groups outright, same as a plain table — there
+                // is no base entity to "extend".
+                if (extendBaseFieldGroup)
+                    throw new ArgumentException(
+                        $"extendBaseFieldGroup applies to table-extensions only — '{tableName}' is a data-entity, which owns its field groups directly. Omit the flag.");
+
+                var msi = GetModelSaveInfoForObject(_provider.DataEntityViews, tableName);
+                AxTableFieldGroup? targetEntityFg = null;
+                foreach (AxTableFieldGroup fg in axEntity.FieldGroups)
+                {
+                    if (string.Equals(fg.Name, groupName, StringComparison.OrdinalIgnoreCase))
+                    { targetEntityFg = fg; break; }
+                }
+                if (targetEntityFg == null)
+                    throw new InvalidOperationException($"Field group '{groupName}' not found on data-entity '{tableName}'");
+
+                targetEntityFg.AddField(new AxTableFieldGroupField { DataField = fieldName });
+                ((IMetaDataEntityViewProvider)_provider.DataEntityViews).Update(axEntity, msi);
+                return new { success = true, operation = "add-field-to-field-group", objectType = "data-entity", objectName = tableName, groupName, fieldName, extendBaseFieldGroup = false, api = "IMetaDataEntityViewProvider.Update" };
+            }
+
+            throw new ArgumentException($"Table, table-extension, or data-entity '{tableName}' not found");
         }
 
         // ========================
@@ -3266,7 +3347,7 @@ namespace D365MetadataBridge.Services
             return moved;
         }
 
-        /// <summary>Removes a field from a table or table-extension.</summary>
+        /// <summary>Removes a field from a table, table-extension, or plain data-entity.</summary>
         public object RemoveField(string tableName, string fieldName)
         {
             var axTable = _provider.Tables.Read(tableName);
@@ -3305,7 +3386,30 @@ namespace D365MetadataBridge.Services
                 return new { success = true, operation = "remove-field", objectName = tableName, fieldName, api = "IMetaTableExtensionProvider.Update" };
             }
 
-            throw new ArgumentException($"Table or table-extension '{tableName}' not found");
+            // A plain data-entity's Fields collection holds AxDataEntityViewField (mapped or
+            // unmapped variants) — a different type hierarchy from AxTableField entirely, but
+            // removal only needs the base type's Name, so one branch covers both shapes. This
+            // mirrors the DataEntityViews fallback AddField already has (see
+            // AddDataEntityMappedFieldOnEntity / AddDataEntityUnmappedField above) — remove-field
+            // had the identical "only tries Tables/TableExtensions" gap add-field used to have.
+            var axEntity = _provider.DataEntityViews.Read(tableName);
+            if (axEntity != null)
+            {
+                var msi = GetModelSaveInfoForObject(_provider.DataEntityViews, tableName);
+                AxDataEntityViewField? toRemove = null;
+                foreach (AxDataEntityViewField f in axEntity.Fields)
+                {
+                    if (string.Equals(f.Name, fieldName, StringComparison.OrdinalIgnoreCase))
+                    { toRemove = f; break; }
+                }
+                if (toRemove == null)
+                    throw new InvalidOperationException($"Field '{fieldName}' not found on data-entity '{tableName}'");
+                axEntity.Fields.Remove(toRemove);
+                ((IMetaDataEntityViewProvider)_provider.DataEntityViews).Update(axEntity, msi);
+                return new { success = true, operation = "remove-field", objectType = "data-entity", objectName = tableName, fieldName, api = "IMetaDataEntityViewProvider.Update" };
+            }
+
+            throw new ArgumentException($"Table, table-extension, or data-entity '{tableName}' not found");
         }
 
         /// <summary>Replaces ALL fields on a table or table-extension (clear + re-add). Use for bulk field rewrite.</summary>
