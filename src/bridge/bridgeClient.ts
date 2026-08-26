@@ -798,12 +798,15 @@ export class BridgeClient extends EventEmitter {
   }
 
   /**
-   * Add a field to a table, table-extension or data-entity-view-extension via
-   * IMetadataProvider.Update(). dataField/dataSource select the data-entity mapped-field
-   * path on the bridge side; fieldGroupName additionally appends it to a base-entity group.
+   * Add a field to a table, table-extension, plain data-entity, or data-entity-view-extension
+   * via IMetadataProvider.Update(). dataField/dataSource select the data-entity(-extension)
+   * mapped-field path on the bridge side; fieldGroupName additionally appends it to a
+   * base-entity group. On a plain data-entity with neither dataField nor dataSource, enumType/
+   * computedFieldMethod select the AxDataEntityViewUnmappedField* path (placeholder field or
+   * SQL-computed field) — see MetadataWriteService.AddField.
    */
-  async addField(objectName: string, fieldName: string, fieldType: string, edt?: string, mandatory?: boolean, label?: string, dataField?: string, dataSource?: string, fieldGroupName?: string): Promise<BridgeWriteResult> {
-    return this.call<BridgeWriteResult>('addField', { objectName, fieldName, fieldType, edt, mandatory, label, dataField, dataSource, fieldGroupName });
+  async addField(objectName: string, fieldName: string, fieldType: string, edt?: string, mandatory?: boolean, label?: string, dataField?: string, dataSource?: string, fieldGroupName?: string, enumType?: string, computedFieldMethod?: string): Promise<BridgeWriteResult> {
+    return this.call<BridgeWriteResult>('addField', { objectName, fieldName, fieldType, edt, mandatory, label, dataField, dataSource, fieldGroupName, enumType, computedFieldMethod });
   }
 
   /** Set a property on any object via IMetadataProvider.Update() */

@@ -1272,6 +1272,25 @@ namespace D365MetadataBridge.Services
         }
 
         /// <summary>
+        /// Sets a plain string-typed metamodel property reflectively.
+        ///
+        /// Used where the property's presence on this exact metamodel build has not been
+        /// independently confirmed against real repo XML (unlike, say, AxTable.Label) —
+        /// reflection turns a wrong guess into a clear "no such property" error instead of a
+        /// silent `dynamic` failure or, worse, a compile-time guess that is simply wrong on
+        /// some metamodel build. A null/empty value is a no-op.
+        /// </summary>
+        private static void SetReflectiveStringProperty(object target, string propertyName, string value)
+        {
+            if (string.IsNullOrEmpty(value)) return;
+            var prop = target.GetType().GetProperty(propertyName)
+                ?? throw new InvalidOperationException(
+                    $"{target.GetType().Name} has no '{propertyName}' property in this metamodel build " +
+                    $"({BuildInfo.MetamodelFileVersion}).");
+            prop.SetValue(target, value);
+        }
+
+        /// <summary>
         /// Creates a new AxMenu via DiskProvider.
         /// </summary>
         public object CreateMenu(string name, string modelName, Dictionary<string, string>? properties)
@@ -1456,6 +1475,27 @@ namespace D365MetadataBridge.Services
 
                     return new { success = true, operation = "add-method", objectType, objectName, methodName, api = "IMetaViewProvider.Update" };
                 }
+                // A plain data-entity's SourceCode.Methods is where a postLoad(Common
+                // _common) override for an unmapped placeholder field lives, and where a
+                // computedFieldMethod named on add-field's ComputedFieldMethod pointer must
+                // resolve to (a method returning SysComputedColumn::returnField(...)) — see
+                // AddField / AddDataEntityUnmappedField above.
+                case "data-entity":
+                {
+                    var axEntity = _provider.DataEntityViews.Read(objectName)
+                        ?? throw new ArgumentException($"Data entity '{objectName}' not found");
+                    var msi = GetModelSaveInfoForObject(_provider.DataEntityViews, objectName);
+
+                    if (!TryUpdateMethodSourceInPlace(axEntity, methodName, source))
+                    {
+                        var axMethod = new AxMethod { Name = methodName, Source = source };
+                        axEntity.AddMethod(axMethod);
+                    }
+
+                    ((IMetaDataEntityViewProvider)_provider.DataEntityViews).Update(axEntity, msi);
+
+                    return new { success = true, operation = "add-method", objectType, objectName, methodName, api = "IMetaDataEntityViewProvider.Update" };
+                }
                 case "form-extension":
                 {
                     var axExt = _provider.FormExtensions.Read(objectName)
@@ -1510,13 +1550,30 @@ namespace D365MetadataBridge.Services
         }
 
         /// <summary>
-        /// Adds a field to a table, a table-extension, or a data-entity-view-extension.
+        /// Adds a field to a table, a table-extension, a plain data-entity, or a
+        /// data-entity-view-extension.
         ///
-        /// The data-entity case is structurally different and therefore keyed off its own
-        /// parameter pair rather than the object name: a mapped field is an
-        /// AxDataEntityViewMappedField (Name/DataField/DataSource/Label/Mandatory), which
-        /// carries NO EDT and no base type — it only points at a field on one of the
-        /// entity's data sources. Confirmed against this VM's metamodel:
+        /// The two data-entity cases are structurally different from a table field (no EDT
+        /// resolution, different XML element family) and from each other, so they are keyed
+        /// off their own parameters rather than the object name:
+        ///
+        ///  - dataField/dataSource (on either a data-entity-extension OR a plain data-entity)
+        ///    select the AxDataEntityView(Extension)MappedField path: Name/DataField/
+        ///    DataSource/Label/Mandatory, no EDT — it points at a field on one of the
+        ///    entity's data sources.
+        ///  - Neither dataField nor dataSource, on a plain data-entity resolved by name below
+        ///    (table and table-extension are tried first and always win when the name
+        ///    collides), selects the AxDataEntityViewUnmappedField* path: a virtual column
+        ///    with no backing table field, populated either by a postLoad() override (no
+        ///    computedFieldMethod — see AddMethod's "data-entity" case) or by a single SQL
+        ///    expression (computedFieldMethod names a method on the entity's own
+        ///    &lt;SourceCode&gt; that returns SysComputedColumn::returnField(...) — the caller
+        ///    adds that method itself via add-table-method/add-method against the same
+        ///    entity; this RPC only writes the &lt;ComputedFieldMethod&gt; pointer, since guessing
+        ///    at the entity's data-source binding to auto-generate the method body would be
+        ///    wrong as often as right).
+        ///
+        /// Confirmed against this VM's metamodel:
         /// AxDataEntityViewExtension.Fields is KeyedObjectCollection&lt;AxDataEntityViewField&gt;,
         /// AxDataEntityViewMappedField derives from AxDataEntityViewField, and
         /// IMetaDataEntityViewExtensionProvider implements
@@ -1530,10 +1587,19 @@ namespace D365MetadataBridge.Services
         /// </summary>
         public object AddField(string tableName, string fieldName, string fieldType,
             string? edt, bool mandatory, string? label,
-            string? dataField = null, string? dataSource = null, string? fieldGroupName = null)
+            string? dataField = null, string? dataSource = null, string? fieldGroupName = null,
+            string? enumType = null, string? computedFieldMethod = null)
         {
             if (!string.IsNullOrEmpty(dataSource) || !string.IsNullOrEmpty(dataField))
             {
+                // A plain data-entity has its own mapped-field XML shape
+                // (AxDataEntityViewMappedField straight on AxDataEntityView.Fields — same
+                // element the create-time fields[] path already writes), distinct from the
+                // data-entity-EXTENSION shape AddDataEntityMappedField below serves.
+                var axEntityForMapped = _provider.DataEntityViews.Read(tableName);
+                if (axEntityForMapped != null)
+                    return AddDataEntityMappedFieldOnEntity(axEntityForMapped, tableName, fieldName, dataField, dataSource, label, mandatory, fieldGroupName);
+
                 return AddDataEntityMappedField(tableName, fieldName, dataField, dataSource, label, mandatory, fieldGroupName);
             }
 
@@ -1545,11 +1611,11 @@ namespace D365MetadataBridge.Services
                 Mandatory = mandatory,
                 Label = label
             };
-            var axField = CreateTableField(param);
 
             var axTable = _provider.Tables.Read(tableName);
             if (axTable != null)
             {
+                var axField = CreateTableField(param);
                 var msi = GetModelSaveInfoForObject(_provider.Tables, tableName);
                 axTable.AddField(axField);
                 var tableProvider = _provider.Tables as IMetaTableProvider
@@ -1561,6 +1627,7 @@ namespace D365MetadataBridge.Services
             var axExt = _provider.TableExtensions.Read(tableName);
             if (axExt != null)
             {
+                var axField = CreateTableField(param);
                 var msi = GetModelSaveInfoForObject(_provider.TableExtensions, tableName);
                 axExt.Fields.Add(axField);
                 var extProvider = _provider.TableExtensions as IMetaTableExtensionProvider
@@ -1569,7 +1636,185 @@ namespace D365MetadataBridge.Services
                 return new { success = true, operation = "add-field", objectName = tableName, fieldName, fieldType, api = "IMetaTableExtensionProvider.Update" };
             }
 
-            throw new ArgumentException($"Table or table-extension '{tableName}' not found");
+            var axEntity = _provider.DataEntityViews.Read(tableName);
+            if (axEntity != null)
+            {
+                return AddDataEntityUnmappedField(axEntity, tableName, fieldName, fieldType, edt, enumType, mandatory, label, computedFieldMethod);
+            }
+
+            throw new ArgumentException($"Table, table-extension, or data-entity '{tableName}' not found");
+        }
+
+        /// <summary>
+        /// add-field on a plain data-entity with dataField+dataSource: appends an
+        /// AxDataEntityViewMappedField straight to AxDataEntityView.Fields — the same
+        /// element the create-time fields[] path writes (see dataEntityXml.ts), just via
+        /// modify instead of a full-file rewrite.
+        /// </summary>
+        private object AddDataEntityMappedFieldOnEntity(AxDataEntityView axEntity, string entityName, string fieldName,
+            string? dataField, string? dataSource, string? label, bool mandatory, string? fieldGroupName)
+        {
+            if (string.IsNullOrEmpty(dataSource))
+                throw new ArgumentException("add-field on a data-entity requires dataSource (the entity data-source the field reads from) alongside dataField.");
+            if (string.IsNullOrEmpty(dataField))
+                throw new ArgumentException("add-field on a data-entity requires dataField (the source table field) alongside dataSource.");
+
+            foreach (AxDataEntityViewField existing in axEntity.Fields)
+            {
+                if (string.Equals(existing.Name, fieldName, StringComparison.OrdinalIgnoreCase))
+                    return new { success = true, operation = "add-field", objectType = "data-entity", objectName = entityName, fieldName, skipped = true, reason = $"field '{fieldName}' already exists", api = "IMetaDataEntityViewProvider.Update" };
+            }
+
+            var msi = GetModelSaveInfoForObject(_provider.DataEntityViews, entityName);
+            var mapped = new AxDataEntityViewMappedField
+            {
+                Name = fieldName,
+                DataField = dataField,
+                DataSource = dataSource
+            };
+            if (!string.IsNullOrEmpty(label)) mapped.Label = label;
+            if (mandatory) mapped.Mandatory = Microsoft.Dynamics.AX.Metadata.Core.MetaModel.AutoNoYes.Yes;
+            axEntity.Fields.Add(mapped);
+
+            var groupAdded = false;
+            if (!string.IsNullOrEmpty(fieldGroupName))
+            {
+                var group = axEntity.FieldGroups
+                    .FirstOrDefault(g => string.Equals(g.Name, fieldGroupName, StringComparison.OrdinalIgnoreCase));
+                if (group == null)
+                {
+                    group = new AxTableFieldGroup { Name = fieldGroupName };
+                    axEntity.FieldGroups.Add(group);
+                }
+                if (!group.Fields.Any(f => string.Equals(f.DataField, fieldName, StringComparison.OrdinalIgnoreCase)))
+                {
+                    group.Fields.Add(new AxTableFieldGroupField { DataField = fieldName });
+                    groupAdded = true;
+                }
+            }
+
+            ((IMetaDataEntityViewProvider)_provider.DataEntityViews).Update(axEntity, msi);
+            return new
+            {
+                success = true,
+                operation = "add-field",
+                objectType = "data-entity",
+                objectName = entityName,
+                fieldName,
+                dataField,
+                dataSource,
+                fieldGroupName = groupAdded ? fieldGroupName : null,
+                api = "IMetaDataEntityViewProvider.Update"
+            };
+        }
+
+        /// <summary>
+        /// add-field on a plain data-entity with NEITHER dataField nor dataSource: appends
+        /// an AxDataEntityViewUnmappedField{BaseType} — a virtual column with no backing
+        /// table field. Two shapes, chosen by whether computedFieldMethod is given:
+        ///
+        ///  - No computedFieldMethod: a bare placeholder (Name + ExtendedDataType/EnumType
+        ///    only). Its value comes from a postLoad(Common _common) override the caller
+        ///    adds separately — this is the "procedural logic" pattern (multiple selects,
+        ///    conditionals) real shipped entities use when a single SQL expression can't
+        ///    express the value (e.g. GUPDiscountInquiryResultEntity).
+        ///  - computedFieldMethod set: same element plus &lt;ComputedFieldMethod&gt;, naming a
+        ///    method on the entity's own &lt;SourceCode&gt; that returns
+        ///    SysComputedColumn::returnField(tableStr(...), dataEntityDataSourceStr(...),
+        ///    fieldStr(...)) — the SQL-computed-column pattern (e.g.
+        ///    SysAttachmentSyncEntity.FileName / defineFileName). The method itself is NOT
+        ///    scaffolded here: it needs the entity's own data-source name and a real table
+        ///    field to point at, which this RPC has no way to guess correctly — add it with
+        ///    add-method (objectType="data-entity") or add-table-method, matching the method
+        ///    name passed here.
+        /// </summary>
+        private object AddDataEntityUnmappedField(AxDataEntityView axEntity, string entityName, string fieldName,
+            string fieldType, string? edt, string? enumType, bool mandatory, string? label, string? computedFieldMethod)
+        {
+            foreach (AxDataEntityViewField existing in axEntity.Fields)
+            {
+                if (string.Equals(existing.Name, fieldName, StringComparison.OrdinalIgnoreCase))
+                    return new { success = true, operation = "add-field", objectType = "data-entity", objectName = entityName, fieldName, skipped = true, reason = $"field '{fieldName}' already exists", api = "IMetaDataEntityViewProvider.Update" };
+            }
+
+            if (!string.IsNullOrEmpty(edt))
+                RequireExtendedDataTypeExists(fieldName, edt!, $"extended data type '{edt}' does not exist");
+
+            var field = CreateUnmappedEntityField((fieldType ?? "String").ToLowerInvariant(), enumType);
+            field.Name = fieldName;
+            if (!string.IsNullOrEmpty(edt))
+                SetReflectiveStringProperty(field, "ExtendedDataType", edt!);
+            if (!string.IsNullOrEmpty(label))
+                SetReflectiveStringProperty(field, "Label", label!);
+            if (!string.IsNullOrEmpty(computedFieldMethod))
+                SetReflectiveStringProperty(field, "ComputedFieldMethod", computedFieldMethod!);
+
+            var msi = GetModelSaveInfoForObject(_provider.DataEntityViews, entityName);
+            axEntity.Fields.Add(field);
+            ((IMetaDataEntityViewProvider)_provider.DataEntityViews).Update(axEntity, msi);
+
+            return new
+            {
+                success = true,
+                operation = "add-field",
+                objectType = "data-entity",
+                objectName = entityName,
+                fieldName,
+                fieldType,
+                unmapped = true,
+                computed = !string.IsNullOrEmpty(computedFieldMethod),
+                computedFieldMethod,
+                api = "IMetaDataEntityViewProvider.Update",
+                note = string.IsNullOrEmpty(computedFieldMethod)
+                    ? "Placeholder field with no backing SQL — populate it with a postLoad(Common _common) override (add-method, objectType=\"data-entity\")."
+                    : $"Add the paired method '{computedFieldMethod}' on the entity's SourceCode (add-method, objectType=\"data-entity\") returning SysComputedColumn::returnField(...) if it does not already exist.",
+            };
+        }
+
+        /// <summary>
+        /// Maps a base-type keyword to the matching AxDataEntityViewUnmappedField{BaseType}
+        /// concrete type. String/Real/Int64/Container/Enum are confirmed against real shipped
+        /// AxDataEntityView metadata; Date/UtcDateTime/Int were not independently confirmed
+        /// in this session, so those resolve the CLR type reflectively and fail with a clear
+        /// "not found in this metamodel build" error instead of a wrong compile-time guess.
+        /// </summary>
+        private AxDataEntityViewField CreateUnmappedEntityField(string baseTypeKeyword, string? enumType)
+        {
+            switch (baseTypeKeyword)
+            {
+                case "string": return new AxDataEntityViewUnmappedFieldString();
+                case "real": return new AxDataEntityViewUnmappedFieldReal();
+                case "int64": return new AxDataEntityViewUnmappedFieldInt64();
+                case "container": return new AxDataEntityViewUnmappedFieldContainer();
+                case "enum":
+                {
+                    var ef = new AxDataEntityViewUnmappedFieldEnum();
+                    if (!string.IsNullOrEmpty(enumType)) ef.EnumType = enumType;
+                    return ef;
+                }
+            }
+
+            var typeNameSuffix = baseTypeKeyword switch
+            {
+                "date" => "Date",
+                "datetime" or "utcdatetime" => "UtcDateTime",
+                "int" or "integer" => "Int",
+                "guid" => "Guid",
+                _ => null,
+            };
+            if (typeNameSuffix == null)
+                throw new ArgumentException(
+                    $"fieldBaseType '{baseTypeKeyword}' has no known AxDataEntityViewUnmappedField mapping. " +
+                    "Supported: String, Real, Int64, Container, Enum, Date, UtcDateTime/DateTime, Int/Integer, Guid.");
+
+            var typeName = $"AxDataEntityViewUnmappedField{typeNameSuffix}";
+            var clrType = typeof(AxDataEntityViewField).Assembly.GetType(
+                $"{typeof(AxDataEntityViewField).Namespace}.{typeName}", throwOnError: false)
+                ?? throw new InvalidOperationException(
+                    $"No '{typeName}' type in this metamodel build ({BuildInfo.MetamodelFileVersion}) — " +
+                    "this base type was not confirmed against real shipped metadata. Use fieldBaseType=String/Real/" +
+                    "Int64/Container/Enum, or check the type name against a real AxDataEntityView*.xml sample first.");
+            return (AxDataEntityViewField)Activator.CreateInstance(clrType)!;
         }
 
         /// <summary>
@@ -1713,7 +1958,7 @@ namespace D365MetadataBridge.Services
                         ?? throw new ArgumentException($"Data entity '{objectName}' not found");
                     var msi = GetModelSaveInfoForObject(_provider.DataEntityViews, objectName);
                     if (!SetAxDataEntityViewProperty(obj, propertyPath, propertyValue))
-                        throw new ArgumentException($"Unknown AxDataEntityView property '{propertyPath}' — nothing was written. Supported: label, developerDocumentation, primaryKey, isPublic, publicEntityName, publicCollectionName, dataManagementEnabled, dataManagementStagingTable, entityCategory, allowRowVersionChangeTracking, allowRetention.");
+                        throw new ArgumentException($"Unknown AxDataEntityView property '{propertyPath}' — nothing was written. Supported: label, developerDocumentation, primaryKey, isPublic, publicEntityName, publicCollectionName, dataManagementEnabled, dataManagementStagingTable, entityCategory, allowRowVersionChangeTracking, allowRetention, tags, isReadOnly, supportsSetBasedSqlOperations.");
                     ((IMetaDataEntityViewProvider)_provider.DataEntityViews).Update(obj, msi);
                     return new { success = true, operation = "modify-property", objectType, objectName, propertyPath, propertyValue, api = "Update" };
                 }
@@ -3822,6 +4067,15 @@ namespace D365MetadataBridge.Services
                 case "datamanagementenabled": e.DataManagementEnabled = ParseNoYes(value); break;
                 case "allowrowversionchangetracking": e.AllowRowVersionChangeTracking = ParseNoYes(value); break;
                 case "allowretention": e.AllowRetention = ParseNoYes(value); break;
+                // Tags/IsReadOnly/SupportsSetBasedSqlOperations were not independently
+                // confirmed against real shipped AxDataEntityView XML this session (unlike
+                // the properties above), so they go through the reflective setters instead
+                // of a direct compile-time property access that could be wrong on some
+                // metamodel build — a bad guess then fails clearly instead of not compiling
+                // at all or, worse, silently binding to the wrong member.
+                case "tags": SetReflectiveStringProperty(e, "Tags", value); break;
+                case "isreadonly": SetEnumProperty(e, "IsReadOnly", value); break;
+                case "supportssetbasedsqloperations": SetEnumProperty(e, "SupportsSetBasedSqlOperations", value); break;
                 case "entitycategory":
                     if (!Enum.TryParse<Microsoft.Dynamics.AX.Metadata.Core.MetaModel.EntityCategory>(value, true, out var ec))
                         throw new ArgumentException(

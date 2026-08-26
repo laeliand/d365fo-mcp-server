@@ -457,13 +457,16 @@ namespace D365MetadataBridge.Protocol
                                 ?? throw new ArgumentException("Missing: objectName");
                             var fieldName = request.GetStringParam("fieldName")
                                 ?? throw new ArgumentException("Missing: fieldName");
-                            // dataField/dataSource select the data-entity-extension mapped-field
-                            // path inside AddField; both are absent for table/table-extension.
-                            // This is the single-op RPC that BridgeClient.addField() calls —
-                            // it must forward the same parameters as the batch-modify case below.
+                            // dataField/dataSource select the data-entity(-extension) mapped-field
+                            // path inside AddField; both are absent for table/table-extension and
+                            // for a data-entity's unmapped/computed field. This is the single-op
+                            // RPC that BridgeClient.addField() calls — it must forward the same
+                            // parameters as the batch-modify case below.
                             // `type`/`extendedDataType` are the spellings the create path's
                             // fields[] uses for the same two things; accepting only the
                             // add-field spelling silently defaulted them (String, no EDT).
+                            // enumType/computedFieldMethod only apply to a data-entity's unmapped
+                            // field path (AxDataEntityViewUnmappedField*) — see AddField.
                             return _writeService!.AddField(tableName, fieldName,
                                 request.GetStringParam("fieldType") ?? request.GetStringParam("type") ?? "String",
                                 request.GetStringParam("edt") ?? request.GetStringParam("extendedDataType"),
@@ -471,7 +474,9 @@ namespace D365MetadataBridge.Protocol
                                 request.GetStringParam("label"),
                                 request.GetStringParam("dataField"),
                                 request.GetStringParam("dataSource"),
-                                request.GetStringParam("fieldGroupName"));
+                                request.GetStringParam("fieldGroupName"),
+                                request.GetStringParam("enumType"),
+                                request.GetStringParam("computedFieldMethod"));
                         });
 
                     case "setproperty":
@@ -1015,8 +1020,9 @@ namespace D365MetadataBridge.Protocol
 
                             case "addfield":
                             case "add-field":
-                                // dataField/dataSource select the data-entity-extension mapped-field
-                                // path inside AddField; both are absent for table/table-extension.
+                                // dataField/dataSource select the data-entity(-extension) mapped-
+                                // field path inside AddField; both are absent for table/table-
+                                // extension and for a data-entity's unmapped/computed field.
                                 // Same `type`/`extendedDataType` aliasing as the single-op RPC.
                                 writeResult = _writeService.AddField(objectName,
                                     S("fieldName") ?? throw new ArgumentException("Missing: fieldName"),
@@ -1026,7 +1032,9 @@ namespace D365MetadataBridge.Protocol
                                     S("label"),
                                     S("dataField"),
                                     S("dataSource"),
-                                    S("fieldGroupName"));
+                                    S("fieldGroupName"),
+                                    S("enumType"),
+                                    S("computedFieldMethod"));
                                 break;
 
                             case "modifyfield":

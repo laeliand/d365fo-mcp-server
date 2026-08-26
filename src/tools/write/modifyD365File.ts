@@ -839,13 +839,25 @@ export const ModifyD365FileArgsSchema = z.object({
     'Optional join/link type when joinSource is set (add-data-source): InnerJoin | OuterJoin | ExistJoin | NotExistJoin | Delayed | Active | Passive.'
   ),
 
-  // For add-field on data-entity-extension: the mapped field's source binding.
-  // fieldName (already defined above) is the entity-facing field name.
+  // For add-field on data-entity / data-entity-extension: the mapped field's source
+  // binding. fieldName (already defined above) is the entity-facing field name.
   dataField: z.string().optional().describe(
-    'Source table field name for add-field on a data-entity-extension (e.g. "MyField"). Required alongside dataSource.'
+    'Source table field name for add-field on a data-entity or data-entity-extension (e.g. "MyField"). ' +
+    'Required alongside dataSource. Omit both dataField and dataSource (on a plain data-entity only) to ' +
+    'add an UNMAPPED field instead — fieldType/fieldBaseType or fieldEnumType, optionally computedFieldMethod.'
   ),
   dataSource: z.string().optional().describe(
-    'Source data-source/table name on the entity for add-field on a data-entity-extension (e.g. "MyTable"). Required alongside dataField.'
+    'Source data-source/table name on the entity for add-field on a data-entity or data-entity-extension ' +
+    '(e.g. "MyTable"). Required alongside dataField.'
+  ),
+  computedFieldMethod: z.string().optional().describe(
+    'add-field on a plain data-entity, with dataField/dataSource both omitted: name of an X++ method on the ' +
+    'entity\'s own SourceCode that this unmapped field delegates to for its value, written as ' +
+    '<ComputedFieldMethod>. Omit for a bare placeholder field populated by a postLoad(Common _common) ' +
+    'override instead (add-method, objectType="data-entity"). When given, the method itself is not ' +
+    'generated here — add it separately (add-method / add-table-method) returning ' +
+    'SysComputedColumn::returnField(tableStr(...), dataEntityDataSourceStr(...), fieldStr(...)) for the ' +
+    'SQL-computed pattern (e.g. SysAttachmentSyncEntity.FileName / defineFileName).'
   ),
 
   // For modify-property
@@ -860,6 +872,11 @@ export const ModifyD365FileArgsSchema = z.object({
     'CountryRegionCodes (comma-separated, e.g. "CZ,SK"). ' +
     'For EDTs: Extends, StringSize, Label, HelpText, ReferenceTable, ReferenceField. ' +
     'For classes: Extends, Abstract, Final, Label. ' +
+    'For data entities (AxDataEntityView): Label, DeveloperDocumentation, PrimaryKey, IsPublic, ' +
+    'PublicEntityName, PublicCollectionName, DataManagementEnabled, DataManagementStagingTable, ' +
+    'EntityCategory (Master/Configuration/Transaction/Reference/Document/Parameters), ' +
+    'AllowRowVersionChangeTracking, AllowRetention, Tags, IsReadOnly (Yes/No), ' +
+    'SupportsSetBasedSqlOperations (Yes/No). ' +
     'For nested properties use dot notation, e.g. "Fields.AxTableField.Name" (rare). ' +
     'Examples: propertyPath="TableGroup" propertyValue="Group"; propertyPath="TitleField1" propertyValue="ItemId"; ' +
     'propertyPath="TableType" propertyValue="TempDB"; propertyPath="Extends" propertyValue="WHSZoneId"; ' +
@@ -1868,14 +1885,18 @@ export async function modifyD365FileTool(
         break;
       }
       case 'add-field': {
-        // A data-entity-extension field is an AxDataEntityViewMappedField
-        // (Name/DataField/DataSource/Label/Mandatory) — it has no EDT and no base type,
-        // so none of the fieldType/fieldBaseType resolution below applies. It goes
-        // through the same bridge op with the mapped-field binding attached; the bridge
-        // routes on that binding, not on the object name.
-        if (objectType === 'data-entity-extension' && args.fieldName) {
-          const dataField = (args as any).dataField as string | undefined;
-          const dataSource = (args as any).dataSource as string | undefined;
+        // A data-entity(-extension) MAPPED field is an AxDataEntityView(Extension)MappedField
+        // (Name/DataField/DataSource/Label/Mandatory) — it has no EDT and no base type, so
+        // none of the fieldType/fieldBaseType resolution below applies. It goes through the
+        // same bridge op with the mapped-field binding attached; the bridge routes on that
+        // binding, not on the object name. On a data-entity-extension a mapped field is the
+        // ONLY shape add-field supports; on a plain data-entity it is one of two shapes —
+        // the other, an unmapped placeholder/computed field, is handled further below when
+        // neither dataField nor dataSource is given.
+        const dataField = (args as any).dataField as string | undefined;
+        const dataSource = (args as any).dataSource as string | undefined;
+        const isMappedFieldAttempt = objectType === 'data-entity-extension' || Boolean(dataField || dataSource);
+        if (objectType === 'data-entity-extension' && args.fieldName && isMappedFieldAttempt) {
           if (!dataField || !dataSource) {
             return {
               content: [{
@@ -1917,10 +1938,42 @@ export async function modifyD365FileTool(
           }
           break;
         }
-        // Everything else is an AxTableField. `required` on add-field is only fieldName
-        // (the mapped-field path above has no fieldType at all), so the type-specific half
-        // of the contract is enforced here instead of silently falling through to a null
-        // bridge result and a generic "required parameters may be missing".
+        // A plain data-entity with dataField/dataSource: the same mapped-field shape as
+        // above, just straight on AxDataEntityView.Fields instead of an extension's
+        // <FieldGroupExtensions>-adjacent AxDataEntityViewExtension.Fields.
+        if (objectType === 'data-entity' && args.fieldName && isMappedFieldAttempt) {
+          if (!dataField || !dataSource) {
+            return {
+              content: [{
+                type: 'text',
+                text:
+                  `❌ add-field on a data-entity needs BOTH dataField and dataSource — ` +
+                  `nothing was written.\n` +
+                  `A mapped field has no EDT of its own: it names an entity-side field (fieldName) that ` +
+                  `points at dataField on the entity data source dataSource. Omit both to add an ` +
+                  `UNMAPPED placeholder/computed field instead (fieldType/fieldEnumType, no dataField/dataSource).\n` +
+                  `\n${renderOpSpec('add-field')}`,
+              }],
+              isError: true,
+            };
+          }
+          bridgeResult = await bridgeAddField(
+            context.bridge,
+            objectName,
+            args.fieldName,
+            '',              // no base type — the mapped-field path ignores it
+            undefined,       // no EDT
+            args.fieldMandatory,
+            args.fieldLabel,
+            { dataField, dataSource, fieldGroupName: (args as any).fieldGroupName },
+          );
+          break;
+        }
+
+        // `required` on add-field is only fieldName (the mapped-field path above has no
+        // fieldType at all), so the type-specific half of the contract is enforced here
+        // instead of silently falling through to a null bridge result and a generic
+        // "required parameters may be missing".
         let enumTypeArg = ((args as any).fieldEnumType as string | undefined)?.trim() || undefined;
 
         // fieldType is an EDT NAME here. In `create` the sibling key fields[].fieldType is
@@ -1985,6 +2038,43 @@ export async function modifyD365FileTool(
             }],
             isError: true,
           };
+        }
+
+        // A plain data-entity, past the mapped-field branch above (so dataField/dataSource
+        // are both absent here): an unmapped placeholder/computed field
+        // (AxDataEntityViewUnmappedField*) — one bridge call, no two-step ModifyField dance
+        // for EnumType the way the table path below needs, since AddField's data-entity
+        // branch takes enumType directly.
+        if (objectType === 'data-entity' && args.fieldName && (args.fieldType || enumTypeArg)) {
+          const computedFieldMethod = ((args as any).computedFieldMethod as string | undefined)?.trim() || undefined;
+          let edtName: string | undefined;
+          let baseType = '';
+          if (enumTypeArg) {
+            baseType = 'Enum';
+          } else if (args.fieldType) {
+            edtName = args.fieldType;
+            baseType = (args as any).fieldBaseType ?? '';
+            if (!baseType) {
+              try {
+                const rdb = symbolIndex.getReadDb();
+                baseType = resolveEdtBaseTypeForField(edtName, rdb);
+              } catch {
+                baseType = edtName; // bridge will apply its own name heuristics
+              }
+            }
+          }
+          bridgeResult = await bridgeAddField(
+            context.bridge,
+            objectName,
+            args.fieldName,
+            baseType,
+            edtName,
+            args.fieldMandatory,
+            args.fieldLabel,
+            undefined,
+            { enumType: enumTypeArg, computedFieldMethod },
+          );
+          break;
         }
 
         // Enum field: AxTableFieldEnum + <EnumType>, and NO EDT — an enum-typed table

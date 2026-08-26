@@ -1699,12 +1699,19 @@ export async function bridgeAddMethod(
 }
 
 /**
- * Adds a field to a table, table-extension or data-entity-view-extension via the C#
- * bridge (IMetadataProvider.Update()).
+ * Adds a field to a table, table-extension, plain data-entity, or data-entity-view-extension
+ * via the C# bridge (IMetadataProvider.Update()).
  *
- * `mapped` carries the data-entity mapped-field binding. A mapped field has no EDT and
- * no base type — it points at a field on one of the entity's data sources — so passing
- * it switches the bridge to the AxDataEntityViewMappedField path.
+ * `mapped` carries the data-entity(-extension) mapped-field binding. A mapped field has no
+ * EDT and no base type — it points at a field on one of the entity's data sources — so
+ * passing it switches the bridge to the AxDataEntityView(Extension)MappedField path.
+ *
+ * `unmapped` only applies to a plain data-entity with no `mapped` binding: it selects the
+ * AxDataEntityViewUnmappedField* path (a virtual column with no backing table field).
+ * `unmapped.enumType` names the enum for fieldType="Enum"; `unmapped.computedFieldMethod`
+ * switches from a bare placeholder field (populated by a postLoad override) to a
+ * SQL-computed field (writes <ComputedFieldMethod> — the paired X++ method still has to be
+ * added separately, e.g. via bridgeAddMethod with objectType="data-entity").
  */
 export async function bridgeAddField(
   bridge: BridgeClient | undefined,
@@ -1715,6 +1722,7 @@ export async function bridgeAddField(
   mandatory?: boolean,
   label?: string,
   mapped?: { dataField?: string; dataSource?: string; fieldGroupName?: string },
+  unmapped?: { enumType?: string; computedFieldMethod?: string },
 ): Promise<{ success: boolean; message: string } | null> {
   if (!bridge?.isReady || !bridge.metadataAvailable) return null;
 
@@ -1722,6 +1730,7 @@ export async function bridgeAddField(
     const result = await bridge.addField(
       tableName, fieldName, fieldType, edt, mandatory, label,
       mapped?.dataField, mapped?.dataSource, mapped?.fieldGroupName,
+      unmapped?.enumType, unmapped?.computedFieldMethod,
     );
     return {
       success: result.success,
